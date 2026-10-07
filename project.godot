@@ -1,0 +1,16 @@
+; pmove — GoldSrc player movement for Godot.
+;
+; The repo is itself a Godot project so a clone can run the suites (./run_tests.sh) and open the
+; demo without any setup. A game consuming pmove copies addons/pmove/ and needs none of this.
+
+config_version=5
+
+[application]
+
+config/name="pmove"
+run/main_scene="res://demo/demo.tscn"
+config/features=PackedStringArray("4.4", "GL Compatibility")
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
