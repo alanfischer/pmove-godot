@@ -15,8 +15,10 @@
 class_name GodotBody extends RefCounted
 
 var _body: CharacterBody3D
-## Extra CollisionShape3Ds to resize with the hull. See _init.
-var mirrored_shapes := PackedStringArray()
+## The shapes set_collision_height resizes, resolved once in _init: the hull first, then any
+## extras the caller named. Held as nodes rather than looked up per call -- a crouch write
+## happens on every tick a correction replays, and the body's shapes do not move between them.
+var _hull_shapes: Array[CollisionShape3D] = []
 # Reused across calls rather than reallocated per query — has_headroom runs every
 # tick a blocked player holds crouch released, and again for each command replayed
 # during reconciliation.
@@ -24,13 +26,23 @@ var _test_params := PhysicsTestMotionParameters3D.new()
 var _test_result := PhysicsTestMotionResult3D.new()
 
 
-## `p_mirrored_shapes` are node paths, relative to the body, of extra CollisionShape3Ds that
+## The hull is the body's first CollisionShape3D child, whatever it is called — found by type so
+## that adapting an existing body does not mean renaming nodes to suit this class.
+##
+## `p_mirrored_shapes` are node paths, relative to the body, of FURTHER CollisionShape3Ds that
 ## should follow the hull when crouching resizes it — a detector volume that has to keep matching
 ## the player's height, say. Each is resolved with get_node_or_null, so a path that is not there
 ## is simply skipped.
 func _init(body: CharacterBody3D, p_mirrored_shapes := PackedStringArray()) -> void:
 	_body = body
-	mirrored_shapes = p_mirrored_shapes
+	for child in body.get_children():
+		if child is CollisionShape3D:
+			_hull_shapes.append(child)
+			break
+	for path in p_mirrored_shapes:
+		var extra := body.get_node_or_null(path) as CollisionShape3D
+		if extra:
+			_hull_shapes.append(extra)
 	_test_params.recovery_as_collision = false
 	_test_params.max_collisions = 4
 	# pmove carries riders of moving brush entities itself (state.carry_motion), so
@@ -93,9 +105,9 @@ func apply_floor_snap() -> void:
 # --- Crouch support ---
 
 func set_collision_height(height: float, center_y: float) -> void:
-	var collision_shape: CollisionShape3D = _body.get_node_or_null("CollisionShape3D")
-	if not collision_shape:
+	if _hull_shapes.is_empty():
 		return
+	var collision_shape := _hull_shapes[0]
 	# Writing shape.height re-cooks the shape and invalidates the body's broadphase
 	# AABB, so skip it when nothing changes. is_crouched now applies the hull on every
 	# write — including the corrections that don't flip it — and those are the common
@@ -104,13 +116,9 @@ func set_collision_height(height: float, center_y: float) -> void:
 	if is_equal_approx(collision_shape.shape.height, height) \
 			and is_equal_approx(collision_shape.position.y, center_y):
 		return
-	collision_shape.shape.height = height
-	collision_shape.position.y = center_y
-	for path in mirrored_shapes:
-		var extra: CollisionShape3D = _body.get_node_or_null(path)
-		if extra:
-			extra.shape.height = height
-			extra.position.y = center_y
+	for shape in _hull_shapes:
+		shape.shape.height = height
+		shape.position.y = center_y
 
 
 func has_headroom(rise: float, from_offset := Vector3.ZERO) -> bool:

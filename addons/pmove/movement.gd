@@ -187,7 +187,9 @@ class MovementModifiers:
 ## is also, by a coincidence worth knowing, four times DIST_EPSILON — comfortably outside the band
 ## a hull trace cannot answer from, which is what this search gets used for here.
 const STUCK_QUANTUM := 0.125
-## Built once on first access. Treat as read-only: it is shared by every caller.
+## Built once on first access, and shared by every caller -- do not mutate it. (A static var
+## is no stricter here than the const it replaced: that symbol could not be reassigned, but
+## an Array's contents were always mutable either way.)
 static var STUCK_OFFSETS: Array[Vector3] = _build_stuck_offsets()
 
 

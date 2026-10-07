@@ -111,9 +111,7 @@ func _build_player() -> void:
 	_char.floor_snap_length = 0.0
 	_char.platform_floor_layers = 0
 
-	# GodotBody resizes the hull on crouch by looking for a child with this exact name.
 	var shape := CollisionShape3D.new()
-	shape.name = "CollisionShape3D"
 	var capsule := CapsuleShape3D.new()
 	capsule.height = _cfg.stand_height
 	capsule.radius = 0.4

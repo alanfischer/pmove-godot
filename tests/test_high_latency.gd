@@ -4,11 +4,6 @@ extends "res://tests/suite.gd"
 ## At 60Hz, 500ms one-way ~ 30 commands in flight simultaneously.
 
 const InputCommand = preload("res://addons/pmove/input_command.gd")
-
-# Loaded by path, not by the global class name: the class registry comes from a cache the
-# editor writes during an import pass, which a bare `--headless --path` run does not perform,
-# so a clean checkout has no registry at all. The classes keep their class_name for
-# consumers; the suites just cannot rely on it.
 const ServerMovementClass = preload("res://addons/pmove/server_movement.gd")
 const ClientMovementClass = preload("res://addons/pmove/client_movement.gd")
 
