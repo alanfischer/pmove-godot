@@ -76,6 +76,10 @@ Single-player? Delete `addons/pmove/net/`. The kernel doesn't reference it.
 | `net/client_movement.gd` | Prediction and reconciliation. |
 | `net/prediction_buffer.gd` | The unacked-input history behind it. |
 
+Networking has its own reference — the body interface, the `ServerMovement` /
+`ClientMovement` APIs, the modifier callback, and the per-frame integration on both sides:
+**[docs/networking.md](docs/networking.md)**.
+
 ### Two duck-typed seams
 
 The kernel takes a **body** — anything with `global_position`, `velocity`, `yaw`,
