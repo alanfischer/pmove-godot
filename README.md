@@ -62,6 +62,8 @@ is the geometry the algorithm was designed for and the only honest test of fidel
 Copy `addons/pmove/` into your project. That's all — it's pure GDScript, no build step, no
 `.gdextension`, and nothing to enable in Project Settings.
 
+Godot **4.4+** (that's where `.uid` sidecars arrive). Developed and tested on 4.7.
+
 Single-player? Delete `addons/pmove/net/`. The kernel doesn't reference it.
 
 ## What's in it
