@@ -21,8 +21,8 @@ shared move code both sides run. It is pure math with no networking in it, and a
 be its only caller: in the game this came from, walking monsters run the same kernel, which is why
 doorframes and step lips stop them no more than they stop a player.
 
-`addons/pmove/net/` is the layer on top: prediction, reconciliation and the input queue, which only a player
-needs.
+`server_movement.gd`, `client_movement.gd` and `prediction_buffer.gd` are the layer on top:
+prediction, reconciliation and the input queue, which only a player needs.
 
 ## Files
 

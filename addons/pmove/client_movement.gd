@@ -9,7 +9,7 @@ const MovementConfig = preload("res://addons/pmove/movement_config.gd")
 # The prediction harness owns the generic loop (unacked history, out-of-order rejection,
 # match-by-ack, replay, prune); this class supplies the movement-specific pieces. Preloaded by path
 # so the bare `-s` test runner resolves it without a class-registry rescan.
-const PredictionBufferClass = preload("res://addons/pmove/net/prediction_buffer.gd")
+const PredictionBufferClass = preload("res://addons/pmove/prediction_buffer.gd")
 
 
 ## Server-authoritative state received from the network.

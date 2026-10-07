@@ -16,7 +16,7 @@ extends "res://tests/suite.gd"
 ## ClientMovement does (see its get_next_seq), so the seqs a test records under are its own
 ## business and spelling them out makes each case's ack arithmetic readable.
 
-const PB := preload("res://addons/pmove/net/prediction_buffer.gd")
+const PB := preload("res://addons/pmove/prediction_buffer.gd")
 
 ## `diverged` predicates. reconcile() takes a Callable so the caller can close over the
 ## server state; the tests only need the two constant answers plus a spy.

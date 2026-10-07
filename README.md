@@ -34,7 +34,7 @@ the same result from the same inputs.
 
 **With the networking half included.** A generic rollback framework gives you prediction and
 reconciliation and leaves the movement-specific decisions to you. Those are the fiddly ones, and
-they're in `net/client_movement.gd`:
+they're in `client_movement.gd`:
 
 - correcting below a ~5 mm threshold amplifies its own error, because replay runs N sweeps in
   one frame where the server ran one per tick, so sub-millimetre mismatches are jitter;
@@ -64,7 +64,8 @@ Copy `addons/pmove/` into your project. That's all — pure GDScript, no build s
 
 Godot **4.4+**; developed and tested on 4.7.
 
-Single-player? Delete `addons/pmove/net/`. The kernel doesn't reference it.
+Single-player? Ignore `server_movement.gd`, `client_movement.gd` and `prediction_buffer.gd` —
+the kernel never references them, and a script nothing preloads is never loaded.
 
 ## What's in it
 
@@ -74,9 +75,9 @@ Single-player? Delete `addons/pmove/net/`. The kernel doesn't reference it.
 | `movement_config.gd` | Physics constants for one simulation. Defaults are Half-Life's cvar values (`sv_friction 4`, `sv_accelerate 10`, `sv_stepsize 18`, …) converted to metres. |
 | `godot_body.gd` | `GodotBody`, adapting a `CharacterBody3D` to the duck-typed body interface. Anything exposing that interface works. |
 | `input_command.gd` | The per-tick command the kernel reads. Also knows how to pack itself for the wire. |
-| `net/server_movement.gd` | Server authority: the input queue and per-tick processing. |
-| `net/client_movement.gd` | Prediction and reconciliation. |
-| `net/prediction_buffer.gd` | The unacked-input history behind it. |
+| `server_movement.gd` | Server authority: the input queue and per-tick processing. |
+| `client_movement.gd` | Prediction and reconciliation. |
+| `prediction_buffer.gd` | The unacked-input history behind it. |
 
 Networking has its own reference — the body interface, the `ServerMovement` / `ClientMovement`
 APIs, the modifier callback, and the per-frame integration on both sides:

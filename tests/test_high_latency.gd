@@ -9,8 +9,8 @@ const InputCommand = preload("res://addons/pmove/input_command.gd")
 # editor writes during an import pass, which a bare `--headless --path` run does not perform,
 # so a clean checkout has no registry at all. The classes keep their class_name for
 # consumers; the suites just cannot rely on it.
-const ServerMovementClass = preload("res://addons/pmove/net/server_movement.gd")
-const ClientMovementClass = preload("res://addons/pmove/net/client_movement.gd")
+const ServerMovementClass = preload("res://addons/pmove/server_movement.gd")
+const ClientMovementClass = preload("res://addons/pmove/client_movement.gd")
 
 const TICK_DELTA := 1.0 / 60.0
 # 500ms round-trip -> 250ms one-way -> ~15 ticks of commands arrive per burst.
