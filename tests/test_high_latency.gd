@@ -5,6 +5,13 @@ extends "res://tests/suite.gd"
 
 const InputCommand = preload("res://addons/pmove/input_command.gd")
 
+# Loaded by path, not by the global class name: the class registry comes from a cache the
+# editor writes during an import pass, which a bare `--headless --path` run does not perform,
+# so a clean checkout has no registry at all. The classes keep their class_name for
+# consumers; the suites just cannot rely on it.
+const ServerMovementClass = preload("res://addons/pmove/net/server_movement.gd")
+const ClientMovementClass = preload("res://addons/pmove/net/client_movement.gd")
+
 const TICK_DELTA := 1.0 / 60.0
 # 500ms round-trip -> 250ms one-way -> ~15 ticks of commands arrive per burst.
 # Server processes once per tick, so two bursts (worst case) ~ 30 commands.
@@ -50,7 +57,7 @@ func _run_tests() -> void:
 
 ## Server receives a 500ms burst of commands at once -- none should be dropped.
 func test_server_queue_holds_500ms_burst() -> void:
-	var sm := ServerMovement.new()
+	var sm := ServerMovementClass.new()
 	for i in LATENCY_TICKS:
 		sm.enqueue(_make_cmd(i + 1))
 	assert_eq(sm.queue_size(), LATENCY_TICKS,
@@ -60,7 +67,7 @@ func test_server_queue_holds_500ms_burst() -> void:
 ## Client predicts for 500ms with no server response.
 ## All entries must be retained for later reconciliation.
 func test_client_holds_unacked_across_500ms() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	var body := StubBody.new()
 	# Record the position after the first predict (simulate_tick alters it)
 	cm.predict(body, _make_cmd(cm.get_next_seq()))
@@ -72,7 +79,7 @@ func test_client_holds_unacked_across_500ms() -> void:
 		"must retain all %d unacked predictions" % LATENCY_TICKS)
 	# Server acks seq 1 with the exact position we predicted
 	var corrected := cm.reconcile(body,
-		ClientMovement.ServerState.new(1, first_pos, first_vel, false, true))
+		ClientMovementClass.ServerState.new(1, first_pos, first_vel, false, true))
 	assert_false(corrected, "matching ack should reconcile cleanly")
 	assert_eq(cm.buffer_size(), LATENCY_TICKS - 1,
 		"reconcile should prune acked entry, keep the rest")
@@ -81,7 +88,7 @@ func test_client_holds_unacked_across_500ms() -> void:
 ## Server ack arrives 30 ticks late. Client has predicted 1..60,
 ## server acks seq 30 with a different position -> must correct and replay.
 func test_reconcile_with_stale_server_ack() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	var body := StubBody.new()
 	var total_ticks := LATENCY_TICKS * 2  # 60 ticks in flight
 	for i in total_ticks:
@@ -92,7 +99,7 @@ func test_reconcile_with_stale_server_ack() -> void:
 	# Server ack for seq 30 with a corrected position
 	var server_pos := Vector3(999, 0, 0)
 	var corrected := cm.reconcile(body,
-		ClientMovement.ServerState.new(LATENCY_TICKS, server_pos, Vector3.ZERO, false, true))
+		ClientMovementClass.ServerState.new(LATENCY_TICKS, server_pos, Vector3.ZERO, false, true))
 	assert_true(corrected, "mismatch should trigger correction")
 	# After correction, buffer should retain only cmds after seq 30
 	assert_eq(cm.buffer_size(), LATENCY_TICKS,

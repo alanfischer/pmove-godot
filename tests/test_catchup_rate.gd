@@ -14,6 +14,12 @@ extends "res://tests/suite.gd"
 
 const InputCommand = preload("res://addons/pmove/input_command.gd")
 
+# Loaded by path, not by the global class name: the class registry comes from a cache the
+# editor writes during an import pass, which a bare `--headless --path` run does not perform,
+# so a clean checkout has no registry at all. The classes keep their class_name for
+# consumers; the suites just cannot rely on it.
+const ServerMovementClass = preload("res://addons/pmove/net/server_movement.gd")
+
 
 ## Minimal stub body — just needs to not crash during process_queue.
 ## We only care about HOW MANY commands were processed, not the physics result.
@@ -52,7 +58,7 @@ func _run_tests() -> void:
 
 ## Baseline: queue=1 processes exactly 1 command.
 func test_single_command_processed_per_call_empty_queue() -> void:
-	var sm := ServerMovement.new()
+	var sm := ServerMovementClass.new()
 	var body := StubBody.new()
 	sm.enqueue(_make_cmd(1))
 	sm.process_queue(body)
@@ -63,7 +69,7 @@ func test_single_command_processed_per_call_empty_queue() -> void:
 ## A single process_queue() call drains the entire queue (GoldSrc-faithful).
 ## 10 commands queued from a WiFi spike → all processed in one tick.
 func test_drains_entire_queue_in_one_call() -> void:
-	var sm := ServerMovement.new()
+	var sm := ServerMovementClass.new()
 	var body := StubBody.new()
 	for i in 10:
 		sm.enqueue(_make_cmd(i + 1))
@@ -77,7 +83,7 @@ func test_drains_entire_queue_in_one_call() -> void:
 ## After the queue drains, subsequent calls with no new input are no-ops.
 ## Only newly-enqueued commands advance last_processed_seq.
 func test_subsequent_calls_only_process_new_commands() -> void:
-	var sm := ServerMovement.new()
+	var sm := ServerMovementClass.new()
 	var body := StubBody.new()
 	for i in 5:
 		sm.enqueue(_make_cmd(i + 1))
@@ -101,7 +107,7 @@ func test_subsequent_calls_only_process_new_commands() -> void:
 ## A backlog at or below ROUTINE_JITTER_THRESHOLD processes only ROUTINE_JITTER_BATCH
 ## commands per call — the rest wait for the next tick instead of snapping through.
 func test_routine_backlog_capped_to_jitter_batch() -> void:
-	var sm := ServerMovement.new()
+	var sm := ServerMovementClass.new()
 	var body := StubBody.new()
 	for i in 3:  # 3 <= ROUTINE_JITTER_THRESHOLD (4)
 		sm.enqueue(_make_cmd(i + 1))
@@ -115,7 +121,7 @@ func test_routine_backlog_capped_to_jitter_batch() -> void:
 ## The threshold check is inclusive: a backlog exactly at ROUTINE_JITTER_THRESHOLD is
 ## still capped, not drained in full.
 func test_backlog_at_threshold_still_capped() -> void:
-	var sm := ServerMovement.new()
+	var sm := ServerMovementClass.new()
 	var body := StubBody.new()
 	for i in 4:  # == ROUTINE_JITTER_THRESHOLD
 		sm.enqueue(_make_cmd(i + 1))
@@ -128,7 +134,7 @@ func test_backlog_at_threshold_still_capped() -> void:
 
 ## A routine backlog spreads across multiple ticks rather than draining all at once.
 func test_routine_backlog_drains_over_multiple_calls() -> void:
-	var sm := ServerMovement.new()
+	var sm := ServerMovementClass.new()
 	var body := StubBody.new()
 	for i in 3:
 		sm.enqueue(_make_cmd(i + 1))
@@ -143,7 +149,7 @@ func test_routine_backlog_drains_over_multiple_calls() -> void:
 ## Individual cmd.delta is clamped to MAX_CMD_DELTA on enqueue to prevent
 ## a malicious client from sending an inflated time step.
 func test_delta_clamped_to_max() -> void:
-	var sm := ServerMovement.new()
+	var sm := ServerMovementClass.new()
 	var body := StubBody.new()
 	# Enqueue a single command with an absurdly large delta (exploit attempt)
 	var cmd := _make_cmd(1, 10.0)  # 10 seconds — should be clamped to 0.2
@@ -160,7 +166,7 @@ func test_delta_clamped_to_max() -> void:
 ## call rather than being throttled like routine jitter — catching up matters more
 ## than smoothness for a rare, discrete event.
 func test_spike_scenario_drains_in_one_call() -> void:
-	var sm := ServerMovement.new()
+	var sm := ServerMovementClass.new()
 	var body := StubBody.new()
 
 	for i in 12:  # 200ms at 60Hz, well past ROUTINE_JITTER_THRESHOLD (4)

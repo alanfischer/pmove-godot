@@ -4,6 +4,12 @@ const Movement = preload("res://addons/pmove/movement.gd")
 const InputCommand = preload("res://addons/pmove/input_command.gd")
 const PredictionBuffer = preload("res://addons/pmove/net/prediction_buffer.gd")
 
+# Loaded by path, not by the global class name: the class registry comes from a cache the
+# editor writes during an import pass, which a bare `--headless --path` run does not perform,
+# so a clean checkout has no registry at all. The classes keep their class_name for
+# consumers; the suites just cannot rely on it.
+const ClientMovementClass = preload("res://addons/pmove/net/client_movement.gd")
+
 
 ## Mock body: flat ground at y=0, no walls. Enough for simulate_tick.
 class StubBody:
@@ -46,8 +52,8 @@ func _make_cmd(seq: int, move := Vector2.ZERO) -> InputCommand:
 
 
 func _server(seq: int, pos := Vector3.ZERO, vel := Vector3.ZERO,
-		crouched := false, on_floor := true, jumping := false) -> ClientMovement.ServerState:
-	return ClientMovement.ServerState.new(seq, pos, vel, crouched, on_floor, jumping)
+		crouched := false, on_floor := true, jumping := false) -> ClientMovementClass.ServerState:
+	return ClientMovementClass.ServerState.new(seq, pos, vel, crouched, on_floor, jumping)
 
 
 func _run_tests() -> void:
@@ -68,14 +74,14 @@ func _run_tests() -> void:
 
 
 func test_seq_increments() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	assert_eq(cm.get_next_seq(), 1, "first seq")
 	assert_eq(cm.get_next_seq(), 2, "second seq")
 	assert_eq(cm.get_next_seq(), 3, "third seq")
 
 
 func test_predict_records_to_buffer() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	var body := StubBody.new()
 	for i in 5:
 		var cmd := _make_cmd(cm.get_next_seq())
@@ -84,7 +90,7 @@ func test_predict_records_to_buffer() -> void:
 
 
 func test_predict_calls_modifier() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	var body := StubBody.new()
 	var counts := [0]
 	var modifier_cb := func(_cmd) -> Movement.MovementModifiers:
@@ -97,7 +103,7 @@ func test_predict_calls_modifier() -> void:
 
 
 func test_predict_syncs_body_to_state() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	var body := StubBody.new()
 	body.global_position = Vector3(5, 0, 3)
 	body.velocity = Vector3(1, 0, 0)
@@ -111,7 +117,7 @@ func test_buffer_overflow_prunes_old() -> void:
 	# injected buffer, which is also the seam a game with its own input history would use.
 	var buffer := PredictionBuffer.new()
 	buffer.max_buffer = 8
-	var cm := ClientMovement.new(null, buffer)
+	var cm := ClientMovementClass.new(null, buffer)
 	var body := StubBody.new()
 	for i in buffer.max_buffer + 20:
 		cm.predict(body, _make_cmd(cm.get_next_seq()))
@@ -123,7 +129,7 @@ func test_buffer_overflow_prunes_old() -> void:
 ## obeys is a movement one: it must keep climbing across clear(), or the server discards the
 ## first commands after a respawn as duplicates of the pre-death ones and the player is stuck.
 func test_seq_is_monotonic() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	assert_eq(cm.last_seq(), 0, "last_seq() is 0 before the first command")
 	assert_eq(cm.get_next_seq(), 1, "sequences start at 1")
 	assert_eq(cm.get_next_seq(), 2, "sequences increment")
@@ -132,7 +138,7 @@ func test_seq_is_monotonic() -> void:
 
 
 func test_clear_keeps_climbing_the_seq() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	var body := StubBody.new()
 	for i in 3:
 		cm.predict(body, _make_cmd(cm.get_next_seq()))
@@ -142,7 +148,7 @@ func test_clear_keeps_climbing_the_seq() -> void:
 
 
 func test_reconcile_match_no_correction() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	var body := StubBody.new()
 	body.global_position = Vector3(5, 0, 3)
 	for i in 5:
@@ -153,7 +159,7 @@ func test_reconcile_match_no_correction() -> void:
 
 
 func test_reconcile_mismatch_snaps_and_replays() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	var body := StubBody.new()
 	for i in 5:
 		cm.predict(body, _make_cmd(cm.get_next_seq()))
@@ -170,7 +176,7 @@ func test_reconcile_mismatch_snaps_and_replays() -> void:
 ## server produce ~0.5mm of noise. Correcting on that noise fires chain
 ## corrections that amplify the error instead of fixing it.
 func test_reconcile_below_threshold_no_correction() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	var body := StubBody.new()
 	var pos := Vector3(10, 0, 5)
 	body.global_position = pos
@@ -184,7 +190,7 @@ func test_reconcile_below_threshold_no_correction() -> void:
 
 ## Mismatches above the 5mm threshold are real divergence and must correct.
 func test_reconcile_above_threshold_corrects() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	var body := StubBody.new()
 	var pos := Vector3(10, 0, 5)
 	body.global_position = pos
@@ -198,7 +204,7 @@ func test_reconcile_above_threshold_corrects() -> void:
 
 ## Only exact float equality suppresses a correction.
 func test_reconcile_exact_match_no_correction() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	var body := StubBody.new()
 	var pos := Vector3(10, 0, 5)
 	body.global_position = pos
@@ -210,7 +216,7 @@ func test_reconcile_exact_match_no_correction() -> void:
 
 
 func test_reconcile_stale_seq() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	var body := StubBody.new()
 	for i in 10:
 		cm.predict(body, _make_cmd(cm.get_next_seq()))
@@ -219,7 +225,7 @@ func test_reconcile_stale_seq() -> void:
 
 
 func test_reconcile_prunes_old_entries() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	var body := StubBody.new()
 	for i in 10:
 		body.global_position = Vector3(float(i + 1), 0, 0)
@@ -236,7 +242,7 @@ func test_reconcile_prunes_old_entries() -> void:
 ## body stays exactly at the server position. If replay fell back to a default
 ## modifier, simulate_tick would run normal movement and the body would drift.
 func test_reconcile_uses_stored_modifier_during_replay() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	var body := StubBody.new()
 	var modifier_cb := func(_cmd) -> Movement.MovementModifiers:
 		var m := Movement.MovementModifiers.new()
@@ -258,7 +264,7 @@ func test_reconcile_uses_stored_modifier_during_replay() -> void:
 
 
 func test_clear_resets_buffer() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	var body := StubBody.new()
 	for i in 5:
 		cm.predict(body, _make_cmd(cm.get_next_seq()))

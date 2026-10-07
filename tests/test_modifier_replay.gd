@@ -8,6 +8,12 @@ extends "res://tests/suite.gd"
 const Movement = preload("res://addons/pmove/movement.gd")
 const InputCommand = preload("res://addons/pmove/input_command.gd")
 
+# Loaded by path, not by the global class name: the class registry comes from a cache the
+# editor writes during an import pass, which a bare `--headless --path` run does not perform,
+# so a clean checkout has no registry at all. The classes keep their class_name for
+# consumers; the suites just cannot rely on it.
+const ClientMovementClass = preload("res://addons/pmove/net/client_movement.gd")
+
 const TICK_DELTA := 1.0 / 60.0
 
 
@@ -52,7 +58,7 @@ func _run_tests() -> void:
 ## Reconciliation must replay ticks 6-10 with gravity=1.0 and ticks 11-20 with
 ## gravity=0.1 — NOT use the current gravity (0.1) for all 15 replayed ticks.
 func test_gravity_change_replayed_correctly() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	var body := StubBody.new()
 	body.global_position = Vector3(0, 10, 0)  # start in the air
 	body.velocity = Vector3.ZERO
@@ -83,7 +89,7 @@ func test_gravity_change_replayed_correctly() -> void:
 	var ref_body := StubBody.new()
 	ref_body.global_position = Vector3(0, 10, 0)
 	ref_body.velocity = Vector3.ZERO
-	var ref_cm := ClientMovement.new()
+	var ref_cm := ClientMovementClass.new()
 	var ref_cb := func(_cmd) -> Movement.MovementModifiers:
 		var m := Movement.MovementModifiers.new()
 		m.gravity_scale = 1.0
@@ -93,7 +99,7 @@ func test_gravity_change_replayed_correctly() -> void:
 	var server_pos := ref_body.global_position + server_nudge
 
 	# Reconcile — stored modifiers override per-tick during replay; no callback needed.
-	var corrected := cm.reconcile(body, ClientMovement.ServerState.new(
+	var corrected := cm.reconcile(body, ClientMovementClass.ServerState.new(
 		5, server_pos, ref_cm.state.velocity, false, false, false))
 	assert_true(corrected, "should correct due to server nudge")
 
@@ -113,7 +119,7 @@ func test_gravity_change_replayed_correctly() -> void:
 	var wrong_body := StubBody.new()
 	wrong_body.global_position = server_pos
 	wrong_body.velocity = ref_cm.state.velocity
-	var wrong_cm := ClientMovement.new()
+	var wrong_cm := ClientMovementClass.new()
 	var wrong_cb := func(_cmd) -> Movement.MovementModifiers:
 		var m := Movement.MovementModifiers.new()
 		m.gravity_scale = 0.1  # wrong: uses current gravity for all
@@ -133,7 +139,7 @@ func test_gravity_change_replayed_correctly() -> void:
 ## Reconcile replay is data-driven from stored MovementModifiers with no live
 ## callback — stored gravity_scale must be applied even without a reconcile callback.
 func test_stored_modifiers_provide_baseline_during_replay() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	var body := StubBody.new()
 	body.global_position = Vector3(0, 50, 0)  # high up so gravity has room
 
@@ -151,11 +157,11 @@ func test_stored_modifiers_provide_baseline_during_replay() -> void:
 	# Stored modifiers should set gravity_scale = 1.0 for each replayed tick.
 	var ref_body := StubBody.new()
 	ref_body.global_position = Vector3(0, 50, 0)
-	var ref_cm := ClientMovement.new()
+	var ref_cm := ClientMovementClass.new()
 	ref_cm.predict(ref_body, _make_cmd(ref_cm.get_next_seq()), modifier_cb)
 	var server_pos := ref_body.global_position + Vector3(0.05, 0, 0)
 
-	cm.reconcile(body, ClientMovement.ServerState.new(
+	cm.reconcile(body, ClientMovementClass.ServerState.new(
 		1, server_pos, ref_cm.state.velocity, false, false, false))
 
 	# Stored modifiers set gravity_scale=1.0, so the player should have fallen
@@ -168,7 +174,7 @@ func test_stored_modifiers_provide_baseline_during_replay() -> void:
 
 ## Same idea as gravity test but for speed_scale — modifiers are replayed per-tick.
 func test_speed_scale_change_replayed_correctly() -> void:
-	var cm := ClientMovement.new()
+	var cm := ClientMovementClass.new()
 	var body := StubBody.new()
 
 	var speed_scale := 1.0
@@ -194,7 +200,7 @@ func test_speed_scale_change_replayed_correctly() -> void:
 
 	# Force reconciliation at tick 3
 	var ref_body := StubBody.new()
-	var ref_cm := ClientMovement.new()
+	var ref_cm := ClientMovementClass.new()
 	var ref_cb := func(_cmd) -> Movement.MovementModifiers:
 		var m := Movement.MovementModifiers.new()
 		m.speed_scale = 1.0
@@ -205,7 +211,7 @@ func test_speed_scale_change_replayed_correctly() -> void:
 		ref_cm.predict(ref_body, cmd, ref_cb)
 	var server_pos := ref_body.global_position + Vector3(0.05, 0, 0)
 
-	cm.reconcile(body, ClientMovement.ServerState.new(
+	cm.reconcile(body, ClientMovementClass.ServerState.new(
 		3, server_pos, ref_cm.state.velocity, false, true, false))
 
 	# Z position should be close to expected (speed changed mid-stream)
