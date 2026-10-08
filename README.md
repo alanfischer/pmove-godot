@@ -1,5 +1,7 @@
 # pmove
 
+[![tests](https://github.com/alanfischer/pmove-godot/actions/workflows/tests.yml/badge.svg)](https://github.com/alanfischer/pmove-godot/actions/workflows/tests.yml)
+
 GoldSrc player movement for Godot 4, with the client-side prediction layer that goes with it.
 
 Named for the original's own `pmove`: the move code Quake and Half-Life share between the
@@ -136,6 +138,10 @@ which both sides apply identically.
 The runner reports a suite that won't compile rather than hanging on it, and treats a
 `SCRIPT ERROR` anywhere in the output as a failure: a GDScript runtime error kills only the
 frame it happens in, so a test can silently drop its remaining assertions and still report green.
+
+CI runs the same script on every push and pull request, against Godot 4.4 (the floor
+`project.godot` declares) and 4.7 — a consumer picks the engine, so both ends of the range are
+tested.
 
 ## License
 

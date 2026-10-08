@@ -1,0 +1,41 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: Godot ${{ matrix.godot }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      # Report both versions: knowing it is one engine and not the library that broke is
+      # the whole point of testing a range.
+      fail-fast: false
+      matrix:
+        # The floor project.godot declares in config/features, and the version pmove is
+        # developed against. A consumer picks the engine, so test both ends of the range.
+        godot: ["4.4", "4.7"]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Godot ${{ matrix.godot }}
+        run: |
+          set -euo pipefail
+          name="Godot_v${{ matrix.godot }}-stable_linux.x86_64"
+          curl -fsSL -o godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${{ matrix.godot }}-stable/$name.zip"
+          unzip -q godot.zip
+          mkdir -p "$HOME/.local/bin"
+          mv "$name" "$HOME/.local/bin/godot"
+          chmod +x "$HOME/.local/bin/godot"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # No GODOT= here on purpose: run_tests.sh falls back to `godot` on PATH, so CI goes
+      # through the same resolution a contributor's checkout does.
+      - name: Run the suites
+        run: ./run_tests.sh
