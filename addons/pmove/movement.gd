@@ -42,6 +42,9 @@ class MovementState:
 	var _is_crouched: bool = false
 
 	var is_jumping: bool = false
+	## Whether the last tick's command held jump — GoldSrc's oldbuttons IN_JUMP. A jump
+	## needs it clear, so holding the button never pogo-sticks, landing included.
+	var jump_held: bool = false
 	var on_floor: bool = false
 	var gravity_scale: float = 1.0
 	var eye_y: float = 1.6  # default = stand_eye; kept in sync by simulate_tick
@@ -104,6 +107,7 @@ class MovementState:
 			"velocity": velocity,
 			"is_crouched": is_crouched,
 			"is_jumping": is_jumping,
+			"jump_held": jump_held,
 			"on_floor": on_floor,
 		}
 
@@ -112,6 +116,7 @@ class MovementState:
 		velocity = snap["velocity"]
 		is_crouched = snap["is_crouched"]
 		is_jumping = snap["is_jumping"]
+		jump_held = snap["jump_held"]
 		on_floor = snap["on_floor"]
 		# eye_y is derived from is_crouched — not stored in snapshots.
 		# Snapping to target on restore ensures the eye origin is always correct
@@ -337,7 +342,7 @@ static func camera_basis(cmd) -> Basis:
 # cmd parameter is untyped (Variant) to avoid class_name dependency issues
 # in headless mode. It expects an InputCommand-shaped object with fields:
 # move_input: Vector2, yaw: float, pitch: float, delta: float,
-# jump: bool, jump_just_pressed: bool, crouch: bool, walk: bool, noclip: bool
+# jump: bool, crouch: bool, walk: bool, noclip: bool
 
 class Simulation:
 	var cfg: MovementConfig
@@ -429,7 +434,7 @@ class Simulation:
 
 		if state.on_floor:
 			state.is_jumping = false
-			if cmd.jump_just_pressed:
+			if cmd.jump and not state.jump_held:
 				state.velocity.y = cfg.jump_speed
 				state.is_jumping = true
 				air_accelerate(state, wish_dir, wish_speed, dt)
@@ -630,6 +635,11 @@ class Simulation:
 	func simulate_tick(body, state: MovementState, cmd) -> void:
 		## Run one full movement tick — shared simulation kernel for client & server.
 		## body: any object implementing the Body interface (e.g. GodotBody).
+		_tick(body, state, cmd)
+		state.jump_held = cmd.jump
+
+
+	func _tick(body, state: MovementState, cmd) -> void:
 
 		# state.position is a view over the body transform — bind before anything reads it.
 		state.bind_body(body)

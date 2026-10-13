@@ -22,10 +22,9 @@ var yaw: float = 0.0
 ## Camera pitch (rotation.x) — needed for water/ladder look-direction movement.
 var pitch: float = 0.0
 
+## Jump button held. The sim makes it edge-triggered itself (MovementState.jump_held),
+## so callers just report the button.
 var jump: bool = false
-
-## Jump button just pressed (edge-triggered, single frame).
-var jump_just_pressed: bool = false
 
 var crouch: bool = false
 var walk: bool = false
@@ -43,18 +42,15 @@ var custom_flags: int = 0
 # --- Wire format: pack booleans into a flags bitmask ---
 
 const FLAG_JUMP := 1
-const FLAG_JUMP_JUST_PRESSED := 2
-const FLAG_CROUCH := 4
-const FLAG_WALK := 8
-const FLAG_NOCLIP := 16
+const FLAG_CROUCH := 2
+const FLAG_WALK := 4
+const FLAG_NOCLIP := 8
 
 
 func pack_flags() -> int:
 	var flags := 0
 	if jump:
 		flags |= FLAG_JUMP
-	if jump_just_pressed:
-		flags |= FLAG_JUMP_JUST_PRESSED
 	if crouch:
 		flags |= FLAG_CROUCH
 	if walk:
@@ -66,7 +62,6 @@ func pack_flags() -> int:
 
 func unpack_flags(flags: int) -> void:
 	jump = (flags & FLAG_JUMP) != 0
-	jump_just_pressed = (flags & FLAG_JUMP_JUST_PRESSED) != 0
 	crouch = (flags & FLAG_CROUCH) != 0
 	walk = (flags & FLAG_WALK) != 0
 	noclip = (flags & FLAG_NOCLIP) != 0

@@ -20,15 +20,19 @@ class ServerState:
 	var is_crouched: bool
 	var on_floor: bool
 	var is_jumping: bool
+	## Replay starts from this, so a jump the server took or refused replays the same way.
+	var jump_held: bool
 
 	func _init(p_seq: int, p_pos: Vector3, p_vel: Vector3,
-			p_crouched: bool, p_on_floor: bool, p_jumping: bool = false) -> void:
+			p_crouched: bool, p_on_floor: bool, p_jumping: bool = false,
+			p_jump_held: bool = false) -> void:
 		seq = p_seq
 		position = p_pos
 		velocity = p_vel
 		is_crouched = p_crouched
 		on_floor = p_on_floor
 		is_jumping = p_jumping
+		jump_held = p_jump_held
 
 
 var cfg: MovementConfig
@@ -140,6 +144,7 @@ func reconcile(body, server: ServerState) -> bool:
 		"velocity": server.velocity,
 		"is_crouched": server.is_crouched,
 		"is_jumping": server.is_jumping,
+		"jump_held": server.jump_held,
 		"on_floor": server.on_floor,
 	})
 	body.velocity = state.velocity

@@ -7,7 +7,7 @@ extends Node3D
 ## as geometry rather than as a .tscn diff. Keys are read directly rather than through an input
 ## map so the demo needs no project setup.
 ##
-## WASD move · Space jump (hold to bunny-hop) · Ctrl crouch · Shift walk · Esc release mouse
+## WASD move · Space jump (re-press on landing to bunny-hop) · Ctrl crouch · Shift walk · Esc release mouse
 
 const Movement = preload("res://addons/pmove/movement.gd")
 const MovementConfig = preload("res://addons/pmove/movement_config.gd")
