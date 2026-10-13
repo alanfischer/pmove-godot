@@ -19,7 +19,6 @@ func test_pack_unpack_roundtrip() -> void:
 	cmd.yaw = 1.5
 	cmd.pitch = -0.2
 	cmd.jump = true
-	cmd.jump_just_pressed = true
 	cmd.crouch = false
 	cmd.walk = true
 	cmd.noclip = false
@@ -35,7 +34,6 @@ func test_pack_unpack_roundtrip() -> void:
 	assert_almost_eq(restored.yaw, 1.5, 0.001, "yaw")
 	assert_almost_eq(restored.pitch, -0.2, 0.001, "pitch")
 	assert_true(restored.jump, "jump")
-	assert_true(restored.jump_just_pressed, "jump_just_pressed")
 	assert_false(restored.crouch, "crouch")
 	assert_true(restored.walk, "walk")
 	assert_false(restored.noclip, "noclip")
@@ -45,7 +43,6 @@ func test_pack_unpack_roundtrip() -> void:
 func test_flags_bitmask_all_combinations() -> void:
 	var flags_map := {
 		"jump": IC.FLAG_JUMP,
-		"jump_just_pressed": IC.FLAG_JUMP_JUST_PRESSED,
 		"crouch": IC.FLAG_CROUCH,
 		"walk": IC.FLAG_WALK,
 		"noclip": IC.FLAG_NOCLIP,
@@ -73,7 +70,6 @@ func test_wire_roundtrip() -> void:
 	cmd.yaw = 2.1
 	cmd.pitch = -0.5
 	cmd.jump = true
-	cmd.jump_just_pressed = false
 	cmd.crouch = true
 	cmd.walk = false
 	cmd.noclip = true
@@ -92,7 +88,6 @@ func test_wire_roundtrip() -> void:
 	assert_almost_eq(restored.yaw, 2.1, 0.001, "wire yaw")
 	assert_almost_eq(restored.pitch, -0.5, 0.001, "wire pitch")
 	assert_true(restored.jump, "wire jump")
-	assert_false(restored.jump_just_pressed, "wire jump_just_pressed")
 	assert_true(restored.crouch, "wire crouch")
 	assert_false(restored.walk, "wire walk")
 	assert_true(restored.noclip, "wire noclip")
@@ -107,7 +102,6 @@ func test_binary_roundtrip() -> void:
 	cmd.yaw = 2.1
 	cmd.pitch = -0.5
 	cmd.jump = true
-	cmd.jump_just_pressed = false
 	cmd.crouch = true
 	cmd.walk = false
 	cmd.noclip = true
@@ -128,7 +122,6 @@ func test_binary_roundtrip() -> void:
 	assert_almost_eq(restored.yaw, 2.1, 0.001, "binary yaw")
 	assert_almost_eq(restored.pitch, -0.5, 0.001, "binary pitch")
 	assert_true(restored.jump, "binary jump")
-	assert_false(restored.jump_just_pressed, "binary jump_just_pressed")
 	assert_true(restored.crouch, "binary crouch")
 	assert_false(restored.walk, "binary walk")
 	assert_true(restored.noclip, "binary noclip")
@@ -172,7 +165,6 @@ func test_default_values() -> void:
 	assert_almost_eq(cmd.yaw, 0.0, 0.001, "default yaw")
 	assert_almost_eq(cmd.pitch, 0.0, 0.001, "default pitch")
 	assert_false(cmd.jump, "default jump")
-	assert_false(cmd.jump_just_pressed, "default jump_just_pressed")
 	assert_false(cmd.crouch, "default crouch")
 	assert_false(cmd.walk, "default walk")
 	assert_false(cmd.noclip, "default noclip")

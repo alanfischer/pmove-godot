@@ -41,7 +41,7 @@ In `addons/pmove/`:
 - **Boolean state fields** use a descriptive prefix: `is_crouched`, `is_jumping`, `is_move_locked` (`is_`), `on_floor`, `on_ladder` (`on_`), `in_water` (`in_`).
 - **InputCommand fields** have no prefix — they're raw inputs, not state: `jump`, `crouch`, `walk`.
 - **Private members** use `_` prefix: `_buffer`, `_input_queue`.
-- **`cmd` parameters** are untyped (Variant) since InputCommand lacks `class_name`. They expect an InputCommand-shaped object with: `seq`, `move_input`, `yaw`, `pitch`, `delta`, `jump`, `jump_just_pressed`, `crouch`, `walk`, `noclip`, `custom_flags`.
+- **`cmd` parameters** are untyped (Variant) since InputCommand lacks `class_name`. They expect an InputCommand-shaped object with: `seq`, `move_input`, `yaw`, `pitch`, `delta`, `jump`, `crouch`, `walk`, `noclip`, `custom_flags`.
 
 ## Body interface
 
@@ -116,7 +116,12 @@ class ServerState:
     var is_crouched: bool
     var on_floor: bool
     var is_jumping: bool
+    var jump_held: bool
 ```
+
+`jump_held` is the sim's record of whether the last command held jump (GoldSrc's `oldbuttons`); a
+jump needs it clear, which is how a held button jumps once. Send it with the rest, or a replay that
+starts from the server's state can take a jump the server refused.
 
 ### modifier_cb signature
 
@@ -165,13 +170,13 @@ server_movement.process_queue(body, modifier_cb)
 send_server_state(server_movement.last_processed_seq,
     server_movement.state.position, server_movement.state.velocity,
     server_movement.state.is_crouched, server_movement.state.on_floor,
-    server_movement.state.is_jumping)
+    server_movement.state.is_jumping, server_movement.state.jump_held)
 ```
 
 ### Client reconciliation (on receiving server state)
 
 ```gdscript
-var server := ClientMovement.ServerState.new(seq, pos, vel, crouched, on_floor, jumping)
+var server := ClientMovement.ServerState.new(seq, pos, vel, crouched, on_floor, jumping, jump_held)
 client_movement.reconcile(body, server)
 ```
 

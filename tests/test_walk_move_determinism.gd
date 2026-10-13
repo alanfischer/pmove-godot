@@ -188,7 +188,6 @@ func test_n_ticks_batched_same_as_n_ticks_sequential() -> void:
 ## of commands, identical result. Tests the half-gravity split and jump impulse.
 func test_jump_trajectory_is_deterministic() -> void:
 	var jump_cmd := _make_cmd(1)
-	jump_cmd.jump_just_pressed = true
 	jump_cmd.jump = true
 
 	var body1 := FlatGroundBody.new()

@@ -311,14 +311,14 @@ func test_restore_resyncs_the_hull_to_the_restored_crouch() -> void:
 
 	state.restore({
 		"position": Vector3.ZERO, "velocity": Vector3.ZERO,
-		"is_crouched": true, "is_jumping": false, "on_floor": true,
+		"is_crouched": true, "is_jumping": false, "jump_held": false, "on_floor": true,
 	})
 	assert_almost_eq(body.height, _sim.cfg.crouch_height, 0.0001,
 		"restoring a crouched snapshot must shrink the hull, not just the flag")
 
 	state.restore({
 		"position": Vector3.ZERO, "velocity": Vector3.ZERO,
-		"is_crouched": false, "is_jumping": false, "on_floor": true,
+		"is_crouched": false, "is_jumping": false, "jump_held": false, "on_floor": true,
 	})
 	assert_almost_eq(body.height, _sim.cfg.stand_height, 0.0001,
 		"and restoring a standing snapshot must grow it back")
