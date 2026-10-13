@@ -111,11 +111,13 @@ func _build_player() -> void:
 	_char.floor_snap_length = 0.0
 	_char.platform_floor_layers = 0
 
+	# A box, as GoldSrc's hulls are. walk_move's step test reads the landing's contact normal,
+	# and a capsule lands on a stair's edge, where that normal tilts toward it: it stalls at
+	# the first riser.
 	var shape := CollisionShape3D.new()
-	var capsule := CapsuleShape3D.new()
-	capsule.height = _cfg.stand_height
-	capsule.radius = 0.4
-	shape.shape = capsule
+	var hull := BoxShape3D.new()
+	hull.size = Vector3(0.8, _cfg.stand_height, 0.8)
+	shape.shape = hull
 	shape.position.y = _cfg.stand_height * 0.5
 	_char.add_child(shape)
 
