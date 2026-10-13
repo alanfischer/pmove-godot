@@ -13,7 +13,13 @@ var _total_pass := 0
 var _total_fail := 0
 
 
-func _init() -> void:
+# Deferred to the first frame: before it the root is not in the tree, so a suite that puts real
+# bodies into the physics space (test_rounded_hull_steps) has nowhere to put them.
+func _initialize() -> void:
+	_run_all.call_deferred()
+
+
+func _run_all() -> void:
 	var dir := DirAccess.open(TEST_DIR)
 	if not dir:
 		printerr("Could not open test directory: %s" % TEST_DIR)
@@ -41,7 +47,7 @@ func _init() -> void:
 		var script_path := TEST_DIR + tf
 		var script: GDScript = load(script_path)
 		# A suite that fails to parse comes back as a GDScript that cannot be instantiated, not
-		# as null. Calling new() on it raises, and a raise in _init aborts the rest of _init --
+		# as null. Calling new() on it raises, and a raise aborts the rest of this function --
 		# including the quit() below, which leaves a headless run hanging with no main scene
 		# instead of reporting the broken suite. So check before calling.
 		if script == null or not script.can_instantiate():
@@ -51,7 +57,7 @@ func _init() -> void:
 
 		var instance = script.new()
 		instance.set_meta("script_path", script_path)
-		instance._run()
+		await instance._run()
 		_total_pass += instance._pass_count
 		_total_fail += instance._fail_count
 

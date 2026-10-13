@@ -8,6 +8,7 @@
 ##   set_collision_height(height: float, center_y: float) -> void
 ##   has_headroom(rise: float, from_offset := Vector3.ZERO) -> bool
 ##   can_move(motion: Vector3, from_offset := Vector3.ZERO) -> bool
+##   surface_normal_below(point: Vector3) -> Vector3  (optional; ZERO when nothing is there)
 ##   global_position: Vector3  (get/set)
 ##   velocity: Vector3  (get/set)
 ##   yaw: float  (get/set)
@@ -24,6 +25,7 @@ var _hull_shapes: Array[CollisionShape3D] = []
 # during reconciliation.
 var _test_params := PhysicsTestMotionParameters3D.new()
 var _test_result := PhysicsTestMotionResult3D.new()
+var _ray_params := PhysicsRayQueryParameters3D.new()
 
 
 ## The hull is the body's first CollisionShape3D child, whatever it is called — found by type so
@@ -127,6 +129,17 @@ func set_collision_height(height: float, center_y: float) -> void:
 ## A box hull keeps its height in size.y; capsules and cylinders have `height`.
 static func _height_of(shape: Shape3D) -> float:
 	return shape.size.y if shape is BoxShape3D else shape.height
+
+
+func surface_normal_below(point: Vector3) -> Vector3:
+	## The normal of the face a short ray straight down through `point` meets — what a
+	## rounded hull resting on an edge is standing on (see Movement.lands_walkable).
+	_ray_params.from = point + Vector3.UP * 0.05
+	_ray_params.to = point + Vector3.DOWN * 0.05
+	_ray_params.collision_mask = _body.collision_mask
+	_ray_params.exclude = [_body.get_rid()]
+	var hit := _body.get_world_3d().direct_space_state.intersect_ray(_ray_params)
+	return hit["normal"] if not hit.is_empty() else Vector3.ZERO
 
 
 func has_headroom(rise: float, from_offset := Vector3.ZERO) -> bool:
