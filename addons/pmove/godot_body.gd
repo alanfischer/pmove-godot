@@ -115,7 +115,7 @@ func set_collision_height(height: float, center_y: float) -> void:
 	# write — including the corrections that don't flip it — and those are the common
 	# case. (This needs the capsule to be a per-body resource: duplicate the shape per body,
 	# or every body using it resizes together.)
-	if is_equal_approx(_height_of(collision_shape.shape), height) \
+	if is_equal_approx(height_of(collision_shape.shape), height) \
 			and is_equal_approx(collision_shape.position.y, center_y):
 		return
 	for cs in _hull_shapes:
@@ -127,7 +127,7 @@ func set_collision_height(height: float, center_y: float) -> void:
 
 
 ## A box hull keeps its height in size.y; capsules and cylinders have `height`.
-static func _height_of(shape: Shape3D) -> float:
+static func height_of(shape: Shape3D) -> float:
 	return shape.size.y if shape is BoxShape3D else shape.height
 
 
