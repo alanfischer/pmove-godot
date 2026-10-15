@@ -7,21 +7,21 @@ GoldSrc player movement for Godot 4, with the client-side prediction layer that 
 Named for the original's own `pmove`: the move code Quake and Half-Life share between the
 client's prediction and the server's authority, so that both arrive at the same answer.
 
+Add a **`PmoveCharacter3D`** where you would put a `CharacterBody3D`, give it a
+`CollisionShape3D`, and press play. It reads the same `ui_*` actions as Godot's Basic Movement
+template until you point it at your own, and the inspector takes a `PmoveConfig` resource for
+the tuning.
+
 ```gdscript
-const Movement = preload("res://addons/pmove/movement.gd")
-const MovementConfig = preload("res://addons/pmove/movement_config.gd")
+@onready var player: PmoveCharacter3D = $Player
 
-var _sim := Movement.Simulation.new(MovementConfig.new())
-var _state := Movement.MovementState.new()
-var _body := GodotBody.new(self)          # self is a CharacterBody3D
+func _unhandled_input(event: InputEvent) -> void:
+    if event is InputEventMouseMotion:
+        player.rotation.y -= event.relative.x * 0.002   # turning the node turns the walk
+        player.pitch = clampf(player.pitch - event.relative.y * 0.002, -PI / 2, PI / 2)
 
-func _physics_process(delta: float) -> void:
-    var cmd := InputCommand.new()
-    cmd.move_input = Input.get_vector("left", "right", "forward", "back")
-    cmd.jump = Input.is_action_pressed("jump")
-    cmd.yaw = _yaw
-    cmd.delta = delta
-    _sim.simulate_tick(_body, _state, cmd)
+func _process(_delta: float) -> void:
+    $Camera3D.position = player.position + Vector3.UP * player.eye_height
 ```
 
 Run `demo/demo.tscn` to feel it: stairs, a ramp, a gap to bunny-hop, a doorframe, a ladder, a
@@ -29,7 +29,8 @@ pool to climb out of, and a speed readout.
 
 ## What it is
 
-**A node-free kernel.** `Movement` is a `RefCounted` taking a duck-typed body, not a `Node`.
+**A node over a node-free kernel.** `PmoveCharacter3D` is the front door; underneath it,
+`Movement` is a `RefCounted` taking a duck-typed body, not a `Node`.
 Nothing in it touches the scene tree, which is what makes it unit-testable without booting a
 scene — and what makes prediction possible at all, since that only works if both sides compute
 the same result from the same inputs.
@@ -59,6 +60,29 @@ fell to 0–10%.
 It runs in a shipped multiplayer game across 24 Half-Life–era BSP maps, against real clipnode
 hulls.
 
+## The node
+
+`PmoveCharacter3D` extends `CharacterBody3D` and moves itself every physics tick.
+
+- **Origin at the feet.** Crouching resizes the first `CollisionShape3D` and keeps its bottom on
+  the origin. The node takes its own copy of that shape, so characters sharing one in a scene
+  don't crouch together.
+- **Steering:** its `rotation.y` is the move direction; `pitch` aims ladders and swimming.
+- **Input:** `read_input` on reads the `action_*` names; off, set `move_input`, `jump`, `crouch`
+  and `walk` yourself, which is how an AI drives it.
+- **`velocity` is the movement's own,** so writing it is a knockback or a launch pad.
+- **Read `on_floor`, not `is_on_floor()`:** the step-up leaves Godot's flag unreliable.
+  `is_crouched`, `on_ladder`, `in_water` and `eye_height` are there too.
+- **Ladders and water** are `Area3D`s on `ladder_layers` / `water_layers`, found at the waist.
+  A ladder is climbed out of along its +Z, or a `ladder_normal` meta if it has one.
+- **Signals:** `jumped`, and `landed(impact_speed)` for fall damage.
+- **It sets** `floor_snap_length = 0`, `floor_max_angle` to GoldSrc's ~45° and the platform
+  layers to 0: Godot's step-snap and platform carry would fight the kernel's own.
+
+Everything below it, `Simulation`, `MovementState` and the rest, is for what the node can't be:
+a client predicting and replaying, a server running queued commands, a monster or a baker
+driving a body that isn't a node.
+
 ## Install
 
 Copy `addons/pmove/` into your project. That's all — pure GDScript, no build step, no
@@ -73,8 +97,9 @@ the kernel never references them, and a script nothing preloads is never loaded.
 
 | file | |
 |---|---|
+| `pmove_character_3d.gd` | `PmoveCharacter3D`, the node: the kernel, the ladder/water driver and input in one `CharacterBody3D`. |
 | `movement.gd` | The kernel: `MovementState`, `MovementModifiers`, `Simulation.simulate_tick()`. Gravity is forward Euler applied once per tick before collision. |
-| `movement_config.gd` | Physics constants for one simulation. Defaults are Half-Life's cvar values (`sv_friction 4`, `sv_accelerate 10`, `sv_stepsize 18`, …) converted to metres. |
+| `movement_config.gd` | `PmoveConfig`, the physics constants for one simulation, as a `Resource`. Defaults are Half-Life's cvar values (`sv_friction 4`, `sv_accelerate 10`, `sv_stepsize 18`, …) converted to metres. |
 | `ladder_water.gd` | Ladders and water: `PM_LadderMove`, swimming and `PM_CheckWaterJump`'s climb-out. A `Driver` picks between them each tick from what the game reports. |
 | `godot_body.gd` | `GodotBody`, adapting a `CharacterBody3D` to the duck-typed body interface. Anything exposing that interface works. |
 | `input_command.gd` | The per-tick command the kernel reads. Also knows how to pack itself for the wire. |
@@ -102,7 +127,8 @@ steep to stand on.
 
 ### Ladders and water
 
-The game says where they are; pmove does the moving. Each tick, before `simulate_tick`, report
+`PmoveCharacter3D` does all of this from its layers. Driving the kernel yourself, the game says
+where they are and pmove does the moving. Each tick, before `simulate_tick`, report
 whether the body is on a ladder (with the ladder's outward normal) and whether it is in water
 deep enough to swim. GoldSrc's waterlevel 2 is about waist-deep. The `Driver` then writes the
 tick's `MovementModifiers`:
@@ -116,7 +142,7 @@ mods.apply_to(state)
 sim.simulate_tick(body, state, cmd)
 ```
 
-The demo finds both with a point query at the waist against `Area3D` volumes. A body that makes
+The node finds both with a point query at the waist against `Area3D` volumes. A body that makes
 its own choices, like a monster swimming where it walks, can call the moves directly:
 `ladder_velocity`, `water_velocity`, `swim` and `water_jump`. `drag_accelerate` is the swim with
 the drag left open, for a game's own free 3D move such as flight.
@@ -144,7 +170,8 @@ player cannot move.
 Global class names resolve from a cache the editor writes during an import pass, which a bare
 `--headless --path` run does not perform. So the scripts are loaded by path
 (`preload("res://addons/pmove/movement.gd")`) rather than by identifier, and the suites run from
-a clean checkout with no editor step.
+a clean checkout with no editor step. `PmoveCharacter3D` and `PmoveConfig` do have names, for
+the Add Node dialog and the inspector, but nothing in the library or its tests relies on them.
 
 ## Determinism
 
@@ -159,7 +186,7 @@ belongs outside it. Ladders, swimming and anything else a game adds are supplied
 ./run_tests.sh          # or: GODOT=/path/to/Godot ./run_tests.sh
 ```
 
-495 assertions across 13 suites, under a second, headless — no scene boot and no editor import.
+537 assertions across 18 suites, under a second, headless — no scene boot and no editor import.
 The runner reports a suite that won't compile rather than hanging on it, and treats a
 `SCRIPT ERROR` anywhere in the output as a failure: a GDScript runtime error kills only the
 frame it happens in, so a test can silently drop its remaining assertions and still report green.
