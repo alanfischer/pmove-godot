@@ -24,8 +24,8 @@ func _physics_process(delta: float) -> void:
     _sim.simulate_tick(_body, _state, cmd)
 ```
 
-Run `demo/demo.tscn` to feel it: stairs, a ramp, a gap to bunny-hop, a doorframe, and a speed
-readout.
+Run `demo/demo.tscn` to feel it: stairs, a ramp, a gap to bunny-hop, a doorframe, a ladder, a
+pool to climb out of, and a speed readout.
 
 ## What it is
 
@@ -75,6 +75,7 @@ the kernel never references them, and a script nothing preloads is never loaded.
 |---|---|
 | `movement.gd` | The kernel: `MovementState`, `MovementModifiers`, `Simulation.simulate_tick()`. Gravity is forward Euler applied once per tick before collision. |
 | `movement_config.gd` | Physics constants for one simulation. Defaults are Half-Life's cvar values (`sv_friction 4`, `sv_accelerate 10`, `sv_stepsize 18`, …) converted to metres. |
+| `ladder_water.gd` | Ladders and water: `PM_LadderMove`, swimming and `PM_CheckWaterJump`'s climb-out. A `Driver` picks between them each tick from what the game reports. |
 | `godot_body.gd` | `GodotBody`, adapting a `CharacterBody3D` to the duck-typed body interface. Anything exposing that interface works. |
 | `input_command.gd` | The per-tick command the kernel reads. Also knows how to pack itself for the wire. |
 | `server_movement.gd` | Server authority: the input queue and per-tick processing. |
@@ -98,6 +99,26 @@ The kernel takes a **body** — anything with `global_position`, `velocity`, `ya
 
 The hull can be a box, as GoldSrc's are, or a capsule: both climb stairs and stop at slopes too
 steep to stand on.
+
+### Ladders and water
+
+The game says where they are; pmove does the moving. Each tick, before `simulate_tick`, report
+whether the body is on a ladder (with the ladder's outward normal) and whether it is in water
+deep enough to swim. GoldSrc's waterlevel 2 is about waist-deep. The `Driver` then writes the
+tick's `MovementModifiers`:
+
+```gdscript
+var driver := LadderWater.Driver.new()   # one per body; it owns the climb-out clock
+
+var mods := Movement.MovementModifiers.new()
+driver.apply(mods, cfg, state, cmd, on_ladder, ladder_normal, in_water, space)
+mods.apply_to(state)
+sim.simulate_tick(body, state, cmd)
+```
+
+The demo finds both with a point query at the waist against `Area3D` volumes. A body that makes
+its own choices, like a monster swimming where it walks, can call the moves directly:
+`ladder_velocity`, `water_velocity`, `swim` and `water_jump`.
 
 `ClientMovement` takes a **prediction harness** — anything with four members:
 
@@ -128,8 +149,8 @@ a clean checkout with no editor step.
 
 Prediction only works if both sides compute the same result from the same inputs, so the kernel
 stays deterministic and free of frame-rate dependence. Behaviour that would compromise that
-belongs outside it — ladders, swimming and flight are supplied through `MovementModifiers`,
-which both sides apply identically.
+belongs outside it. Ladders, swimming and anything else a game adds are supplied through
+`MovementModifiers`, which both sides apply identically.
 
 ## Tests
 
