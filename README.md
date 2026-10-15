@@ -96,9 +96,8 @@ The kernel takes a **body** — anything with `global_position`, `velocity`, `ya
 `has_headroom()` and `can_move()`. `GodotBody` is the bundled adapter for `CharacterBody3D`;
 `simulate_tick` never sees a `Node`.
 
-Give the body a box hull, as GoldSrc does. Stepping accepts a landing by its contact normal, and a
-capsule meets a stair on its edge, where that normal tilts too far to count as floor: under Godot's
-own physics a capsule stalls at a 0.4 m riser that a box walks straight up.
+The hull can be a box, as GoldSrc's are, or a capsule: both climb stairs and stop at slopes too
+steep to stand on.
 
 `ClientMovement` takes a **prediction harness** — anything with four members:
 
