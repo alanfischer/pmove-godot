@@ -148,8 +148,7 @@ func _set_hull(height: float) -> void:
 
 
 func _toggle_hull() -> void:
-	var s = _hull_shape.shape
-	var height: float = s.size.y if s is BoxShape3D else s.height
+	var height := GodotBody.height_of(_hull_shape.shape)
 	_use_capsule = not _use_capsule
 	_set_hull(height)
 
