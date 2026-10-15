@@ -636,7 +636,9 @@ class Simulation:
 		## Run one full movement tick — shared simulation kernel for client & server.
 		## body: any object implementing the Body interface (e.g. GodotBody).
 		_tick(body, state, cmd)
-		state.jump_held = cmd.jump
+		# A ladder or swim tick can release jump but never latch it: PM_LadderMove and
+		# PM_Jump's swim branch leave oldbuttons alone, so jump held climbing out jumps.
+		state.jump_held = cmd.jump and (state.jump_held or not state.velocity_override_active)
 
 
 	func _tick(body, state: MovementState, cmd) -> void:
