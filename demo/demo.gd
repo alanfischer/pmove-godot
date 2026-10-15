@@ -1,8 +1,8 @@
 extends Node3D
 ## A course for feeling the movement: flat ground to build speed on, stairs to walk up without
-## catching, a ramp to surf down, a gap that needs a bunny-hopped landing, a doorframe, a ladder
-## and a pool to climb out of — the geometry GoldSrc movement exists to handle gracefully and
-## `move_and_slide` does not.
+## catching, a ramp to surf down, a gap that needs a bunny-hopped landing, a doorframe, a ladder,
+## a pool to climb out of, a lift and a turntable — the geometry GoldSrc movement exists to handle
+## gracefully and `move_and_slide` does not.
 ##
 ## Everything is built in code so the scene file stays a single node and the course is readable
 ## as geometry rather than as a .tscn diff. The input actions are registered in code too, so the
@@ -26,8 +26,10 @@ var _char: PmoveCharacterScript
 var _camera: Camera3D
 var _readout: Label
 
-var _yaw := 0.0
 var _pitch := 0.0
+var _lift: AnimatableBody3D
+var _turntable: AnimatableBody3D
+var _clock := 0.0
 var _top_speed := 0.0
 
 
@@ -83,6 +85,10 @@ func _build_world() -> void:
 	# A low lip to crouch under.
 	_box(Vector3(6, 0.4, 0.6), Vector3(16, 1.0, 4))
 
+	# Movers are AnimatableBody3Ds: the character rides them and turns with them.
+	_lift = _box(Vector3(3, 0.3, 3), Vector3(15.7, 0.15, 16), true)
+	_turntable = _box(Vector3(7, 0.3, 7), Vector3(20, 0.15, -20), true)
+
 	# A pool. Its surface is 0.3 m under the ground, so a swimmer at the bank climbs out with a
 	# water-jump, and its floor is deep enough to dive to.
 	_box(Vector3(6, 1, 8), Vector3(-18, -3.0, 14))
@@ -99,8 +105,8 @@ func _build_world() -> void:
 			Color(0.55, 0.35, 0.15, 0.6))
 
 
-func _box(size: Vector3, pos: Vector3) -> StaticBody3D:
-	var sb := StaticBody3D.new()
+func _box(size: Vector3, pos: Vector3, mover := false) -> PhysicsBody3D:
+	var sb: PhysicsBody3D = AnimatableBody3D.new() if mover else StaticBody3D.new()
 	sb.position = pos
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
@@ -242,7 +248,8 @@ func _bind_keys() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
-		_yaw -= event.relative.x * MOUSE_SENS
+		# Turning the character turns its walk, and keeps whatever a turntable has added.
+		_char.rotation.y -= event.relative.x * MOUSE_SENS
 		_pitch = clampf(_pitch - event.relative.y * MOUSE_SENS, -PI / 2.0, PI / 2.0)
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
@@ -252,16 +259,21 @@ func _unhandled_input(event: InputEvent) -> void:
 		_toggle_hull()
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
+	# The lift runs from the ground to the tower's roof and back every 8 s; the turntable turns.
+	# This node is the character's parent, so both move before the character's own tick.
+	_clock += delta
+	_lift.position.y = lerpf(0.15, 4.85, 0.5 - 0.5 * cos(_clock * TAU / 8.0))
+	_turntable.rotation.y = _clock * 0.6
+
 	# The character moves itself; this only aims it and follows it.
-	_char.rotation.y = _yaw
 	_char.pitch = _pitch
 	_sync_hull_mesh()
 
 	# Third-person camera: orbit behind the player and always frame its centre, so
 	# tilting the view never loses the capsule.
 	var pivot := _hull_shape.global_position
-	var offset := Basis(Vector3.UP, _yaw) * Vector3(0.0, 4.0 + _pitch * 2.0, 6.0)
+	var offset := Basis(Vector3.UP, _char.rotation.y) * Vector3(0.0, 4.0 + _pitch * 2.0, 6.0)
 	_camera.global_position = pivot + offset
 	_camera.look_at(pivot, Vector3.UP)
 

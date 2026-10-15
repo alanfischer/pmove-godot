@@ -1,10 +1,14 @@
 class_name PmoveCharacter3D extends CharacterBody3D
 ## GoldSrc movement as a node: add it, give it a CollisionShape3D, and it walks, steps, jumps,
-## crouches, climbs ladders and swims the way Half-Life does.
+## crouches, climbs ladders, swims and rides moving platforms the way Half-Life does.
 ##
 ## Turn it by setting its rotation.y and aim with [member pitch], which steers ladders and
 ## swimming. [member velocity] is the movement's own: set it for a knockback or a launch pad.
 ## Read [member on_floor] rather than is_on_floor(), which the step-up leaves unreliable.
+##
+## Moving platforms are AnimatableBody3Ds: the character rides them, turns with them, and is
+## pushed ahead of one that runs into it. A door that wants to stop when blocked can ask
+## [member contacts].mover_obstruction(self).
 ##
 ## This is the single-player front door. Prediction, server authority and bodies that are not
 ## nodes drive the kernel (movement.gd) directly.
@@ -14,6 +18,7 @@ const MovementConfig = preload("res://addons/pmove/movement_config.gd")
 const InputCommand = preload("res://addons/pmove/input_command.gd")
 const LadderWater = preload("res://addons/pmove/ladder_water.gd")
 const GodotBodyScript = preload("res://addons/pmove/godot_body.gd")
+const HullContacts = preload("res://addons/pmove/hull_contacts.gd")
 
 ## Left the ground under its own jump, bunny hops included.
 signal jumped
@@ -61,6 +66,7 @@ var in_water := false
 
 var simulation: Movement.Simulation
 var state := Movement.MovementState.new()
+var contacts: HullContacts
 
 var _body: GodotBodyScript
 var _driver := LadderWater.Driver.new()
@@ -82,6 +88,7 @@ func _ready() -> void:
 				child.shape = child.shape.duplicate()
 			break
 	_body = GodotBodyScript.new(self)
+	contacts = HullContacts.new(self)
 	state.bind_body(_body)
 	state._stand_height = config.stand_height
 	state._crouch_height = config.crouch_height
@@ -110,6 +117,7 @@ func _physics_process(delta: float) -> void:
 	if on_ladder:
 		ladder_normal = ladder.get_meta(&"ladder_normal", ladder.global_basis.z.normalized())
 	var mods := Movement.MovementModifiers.new()
+	contacts.apply(mods, state, cmd, _body)
 	_driver.apply(mods, config, state, cmd, on_ladder, ladder_normal, in_water,
 			get_world_3d().direct_space_state)
 	mods.apply_to(state)
@@ -118,6 +126,7 @@ func _physics_process(delta: float) -> void:
 	state.velocity = velocity
 	var was_on_floor := state.on_floor
 	simulation.simulate_tick(_body, state, cmd)
+	rotation.y += contacts.carry_yaw_delta
 
 	if was_on_floor and state.is_jumping and not state.velocity_override_active:
 		jumped.emit()

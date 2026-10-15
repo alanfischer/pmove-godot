@@ -25,7 +25,7 @@ func _process(_delta: float) -> void:
 ```
 
 Run `demo/demo.tscn` to feel it: stairs, a ramp, a gap to bunny-hop, a doorframe, a ladder, a
-pool to climb out of, and a speed readout.
+pool to climb out of, a lift, a turntable, and a speed readout.
 
 ## What it is
 
@@ -75,6 +75,9 @@ hulls.
   `is_crouched`, `on_ladder`, `in_water` and `eye_height` are there too.
 - **Ladders and water** are `Area3D`s on `ladder_layers` / `water_layers`, found at the waist.
   A ladder is climbed out of along its +Z, or a `ladder_normal` meta if it has one.
+- **Moving platforms** are `AnimatableBody3D`s. It rides them, turns with them, and is pushed
+  ahead of one that runs into it; a door can ask `contacts.mover_obstruction(self)` whether it is
+  crushing someone.
 - **Signals:** `jumped`, and `landed(impact_speed)` for fall damage.
 - **It sets** `floor_snap_length = 0`, `floor_max_angle` to GoldSrc's ~45° and the platform
   layers to 0: Godot's step-snap and platform carry would fight the kernel's own.
@@ -101,6 +104,7 @@ the kernel never references them, and a script nothing preloads is never loaded.
 | `movement.gd` | The kernel: `MovementState`, `MovementModifiers`, `Simulation.simulate_tick()`. Gravity is forward Euler applied once per tick before collision. |
 | `movement_config.gd` | `PmoveConfig`, the physics constants for one simulation, as a `Resource`. Defaults are Half-Life's cvar values (`sv_friction 4`, `sv_accelerate 10`, `sv_stepsize 18`, …) converted to metres. |
 | `ladder_water.gd` | Ladders and water: `PM_LadderMove`, swimming and `PM_CheckWaterJump`'s climb-out. A `Driver` picks between them each tick from what the game reports. |
+| `hull_contacts.gd` | Movers and unsticking: riding, being pushed, depenetration and `PM_CheckStuck`, as per-tick modifiers. |
 | `godot_body.gd` | `GodotBody`, adapting a `CharacterBody3D` to the duck-typed body interface. Anything exposing that interface works. |
 | `input_command.gd` | The per-tick command the kernel reads. Also knows how to pack itself for the wire. |
 | `server_movement.gd` | Server authority: the input queue and per-tick processing. |
@@ -124,6 +128,21 @@ The kernel takes a **body** — anything with `global_position`, `velocity`, `ya
 
 The hull can be a box, as GoldSrc's are, or a capsule: both climb stairs and stop at slopes too
 steep to stand on.
+
+### Movers
+
+`HullContacts` is GoldSrc's pusher for a body you drive yourself. One per body; each tick, before
+`simulate_tick`, it probes the hull once and writes the ride, the push, a capped depenetration
+and any unstick into the tick's modifiers, so a client records and replays them like everything
+else:
+
+```gdscript
+var contacts := HullContacts.new(character)    # the CharacterBody3D
+contacts.mover_velocity = func(m): return []   # optional: [vel, angvel] for interpolated movers
+
+contacts.apply(mods, state, cmd, body)         # first call in a physics frame only
+rotation.y += contacts.carry_yaw_delta         # after the tick: turn with the mover
+```
 
 ### Ladders and water
 
@@ -186,7 +205,7 @@ belongs outside it. Ladders, swimming and anything else a game adds are supplied
 ./run_tests.sh          # or: GODOT=/path/to/Godot ./run_tests.sh
 ```
 
-537 assertions across 18 suites, under a second, headless — no scene boot and no editor import.
+550 assertions across 19 suites, under a second, headless — no scene boot and no editor import.
 The runner reports a suite that won't compile rather than hanging on it, and treats a
 `SCRIPT ERROR` anywhere in the output as a failure: a GDScript runtime error kills only the
 frame it happens in, so a test can silently drop its remaining assertions and still report green.
