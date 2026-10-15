@@ -129,10 +129,17 @@ static func water_velocity(cfg, current_velocity: Vector3, is_crouched: bool, cm
 
 ## The swim itself: water drag, then acceleration toward `wish_vel`.
 static func swim(cfg, current_velocity: Vector3, wish_vel: Vector3, delta: float) -> Vector3:
+	return drag_accelerate(current_velocity, wish_vel, delta, cfg.water_friction, cfg.accelerate)
+
+
+## Drag proportional to speed, then acceleration toward `wish_vel` — the swim's rule, for any
+## free 3D move through a medium (a game's flight, say) that only differs in its drag.
+static func drag_accelerate(current_velocity: Vector3, wish_vel: Vector3, delta: float,
+		drag: float, accelerate: float) -> Vector3:
 	var vel := current_velocity
 	var cur_speed := vel.length()
 	if cur_speed > 0.01:
-		var drop: float = cur_speed * cfg.water_friction * delta
+		var drop: float = cur_speed * drag * delta
 		vel *= maxf(cur_speed - drop, 0.0) / cur_speed
 
 	if wish_vel.length_squared() > 0.001:
@@ -140,7 +147,7 @@ static func swim(cfg, current_velocity: Vector3, wish_vel: Vector3, delta: float
 		var wish_dir := wish_vel / wish_speed
 		var add_speed := wish_speed - vel.dot(wish_dir)
 		if add_speed > 0:
-			vel += minf(cfg.accelerate * delta * wish_speed, add_speed) * wish_dir
+			vel += minf(accelerate * delta * wish_speed, add_speed) * wish_dir
 
 	return vel
 

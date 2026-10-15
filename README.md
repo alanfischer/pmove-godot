@@ -118,7 +118,8 @@ sim.simulate_tick(body, state, cmd)
 
 The demo finds both with a point query at the waist against `Area3D` volumes. A body that makes
 its own choices, like a monster swimming where it walks, can call the moves directly:
-`ladder_velocity`, `water_velocity`, `swim` and `water_jump`.
+`ladder_velocity`, `water_velocity`, `swim` and `water_jump`. `drag_accelerate` is the swim with
+the drag left open, for a game's own free 3D move such as flight.
 
 `ClientMovement` takes a **prediction harness** — anything with four members:
 
