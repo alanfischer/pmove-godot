@@ -68,6 +68,8 @@ func _run_tests() -> void:
 	_run_method("test_repress_after_landing_jumps")
 	_run_method("test_press_in_air_held_through_landing_does_not_jump")
 	_run_method("test_reconcile_replays_from_the_servers_jump_held")
+	_run_method("test_held_through_a_swim_jumps_on_the_ground")
+	_run_method("test_latched_before_a_swim_stays_latched")
 
 
 func test_press_jumps() -> void:
@@ -118,3 +120,31 @@ func test_reconcile_replays_from_the_servers_jump_held() -> void:
 			assert_false(cm.state.is_jumping, "server held jump: the replay does not jump")
 		else:
 			assert_true(cm.state.is_jumping, "server released jump: the replay jumps")
+
+
+## Swimming up: a velocity override, as a game drives ladders and water.
+func _swim(body, state: Movement.MovementState, ticks: int) -> void:
+	state.velocity_override_active = true
+	state.override_velocity = Vector3.ZERO
+	for i in ticks:
+		_sim.simulate_tick(body, state, _cmd(true))
+	state.velocity_override_active = false
+	state.on_floor = true
+
+
+func test_held_through_a_swim_jumps_on_the_ground() -> void:
+	var body := FloorBody.new()
+	var state := Movement.MovementState.new()
+	_swim(body, state, 30)
+	assert_false(state.jump_held, "jump held while swimming does not latch")
+	assert_eq(_count_jumps(body, state, true, 1), 1,
+		"so still holding it on reaching the ground jumps, as it does out of PM_Jump's swim branch")
+
+
+func test_latched_before_a_swim_stays_latched() -> void:
+	var body := FloorBody.new()
+	var state := _grounded_state()
+	_sim.simulate_tick(body, state, _cmd(true))
+	_swim(body, state, 30)
+	assert_true(state.jump_held, "a latch from before the swim survives it while held")
+	assert_eq(_count_jumps(body, state, true, 1), 0, "and holding on does not jump")

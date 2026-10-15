@@ -535,10 +535,7 @@ class Simulation:
 		# hangs on four rope brushes pitched at 59.3 degrees, right in that gap: walking
 		# on made the player climb the ropes in a series of hops. It is the same
 		# threshold step_down already uses, and the body's own floor_max_angle.
-		var landed_on_floor := false
-		if down_col != null:
-			landed_on_floor = (down_col as KinematicCollision3D).get_normal().dot(Vector3.UP) >= WALK_NORMAL_Y
-		if step_rise >= cfg.min_step_rise and landed_on_floor:
+		if step_rise >= cfg.min_step_rise and lands_walkable(body, down_col):
 			body.velocity = Vector3(saved_vel.x, 0.0, saved_vel.z)
 			body.apply_floor_snap()
 			state.velocity = body.velocity
@@ -550,6 +547,28 @@ class Simulation:
 				body.force_sync_physics()
 			state.velocity = normal_vel
 			return normal_on_floor if normal_on_floor else step_down(body, state)
+
+
+	## Whether a downward move came to rest on something standable. GoldSrc traced boxes,
+	## which meet a stair top flat; a rounded hull meets it on the stair's edge, where the
+	## contact normal points at the hull's centre. Off a 0.4 m riser that reads ~0.3 until the
+	## hull overhangs the edge by more than it moves in a tick, so a capsule could never step
+	## up from rest. On an edge, ask the face just past it instead: a stair top passes, and a
+	## slope too steep to stand on still fails, since past the contact is the same slope.
+	func lands_walkable(body, col) -> bool:
+		if col == null:
+			return false
+		var hit := col as KinematicCollision3D
+		if hit.get_normal().y >= WALK_NORMAL_Y:
+			return true
+		if not body.has_method("surface_normal_below"):
+			return false
+		var at: Vector3 = hit.get_position()
+		var out := Vector3(at.x - body.global_position.x, 0.0, at.z - body.global_position.z)
+		if out.length_squared() < 1e-8:
+			return false
+		var face: Vector3 = body.surface_normal_below(at + out.normalized() * 0.01)
+		return face.y >= WALK_NORMAL_Y
 
 
 	## GoldSrc PM_WalkMove closes with a downward trace, which is what keeps a player
@@ -569,7 +588,7 @@ class Simulation:
 	func step_down(body, state: MovementState) -> bool:
 		var before: Vector3 = body.global_position
 		var col = body.move_and_collide(Vector3.DOWN * (cfg.step_height + 0.01))
-		if col != null and (col as KinematicCollision3D).get_normal().dot(Vector3.UP) >= WALK_NORMAL_Y:
+		if lands_walkable(body, col):
 			# Landed: drop the accumulated fall speed the way a real floor contact
 			# would, or it compounds each tick until the gap outgrows step_height.
 			var v: Vector3 = body.velocity
@@ -636,7 +655,9 @@ class Simulation:
 		## Run one full movement tick — shared simulation kernel for client & server.
 		## body: any object implementing the Body interface (e.g. GodotBody).
 		_tick(body, state, cmd)
-		state.jump_held = cmd.jump
+		# A ladder or swim tick can release jump but never latch it: PM_LadderMove and
+		# PM_Jump's swim branch leave oldbuttons alone, so jump held climbing out jumps.
+		state.jump_held = cmd.jump and (state.jump_held or not state.velocity_override_active)
 
 
 	func _tick(body, state: MovementState, cmd) -> void:
