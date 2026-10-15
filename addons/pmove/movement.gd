@@ -67,6 +67,8 @@ class MovementState:
 	var base_velocity: Vector3 = Vector3.ZERO
 	# Skip ground friction this tick (e.g. icy surface, separate from basevelocity).
 	var no_friction: bool = false
+	# No jump handling this tick: neither jumps nor latches jump_held (a water-jump in flight).
+	var skip_jump: bool = false
 	# GoldSrc pusher carry: world-space displacement of the mover underfoot this tick
 	# (lift, golem). Applied as its own collision-checked move at the start of
 	# simulate_tick, then cleared — transient, not part of snapshot()/restore(); replay
@@ -149,6 +151,8 @@ class MovementModifiers:
 	var base_velocity: Vector3 = Vector3.ZERO
 	## Skip ground friction this tick (e.g. icy surface, separate from basevelocity).
 	var no_friction: bool = false
+	## No jump handling this tick — GoldSrc's waterjump branch never reaches PM_Jump.
+	var skip_jump: bool = false
 	## GoldSrc pusher carry: displacement of the mover underfoot this tick.
 	var carry_motion: Vector3 = Vector3.ZERO
 	## Unstick backstop: last-resort push out of a solid the hull is embedded in
@@ -168,6 +172,7 @@ class MovementModifiers:
 		state.override_velocity = override_velocity
 		state.base_velocity = base_velocity
 		state.no_friction = no_friction
+		state.skip_jump = skip_jump
 		state.carry_motion = carry_motion
 		state.depenetration = depenetration
 		state.unstick_offset = unstick_offset
@@ -434,7 +439,7 @@ class Simulation:
 
 		if state.on_floor:
 			state.is_jumping = false
-			if cmd.jump and not state.jump_held:
+			if cmd.jump and not state.jump_held and not state.skip_jump:
 				state.velocity.y = cfg.jump_speed
 				state.is_jumping = true
 				air_accelerate(state, wish_dir, wish_speed, dt)
@@ -655,9 +660,10 @@ class Simulation:
 		## Run one full movement tick — shared simulation kernel for client & server.
 		## body: any object implementing the Body interface (e.g. GodotBody).
 		_tick(body, state, cmd)
-		# A ladder or swim tick can release jump but never latch it: PM_LadderMove and
-		# PM_Jump's swim branch leave oldbuttons alone, so jump held climbing out jumps.
-		state.jump_held = cmd.jump and (state.jump_held or not state.velocity_override_active)
+		# A ladder, swim or water-jump tick can release jump but never latch it: none of those
+		# paths sets oldbuttons, so jump held climbing out jumps.
+		state.jump_held = cmd.jump and (state.jump_held
+				or not (state.velocity_override_active or state.skip_jump))
 
 
 	func _tick(body, state: MovementState, cmd) -> void:

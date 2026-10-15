@@ -1,19 +1,26 @@
 extends Node3D
 ## A course for feeling the movement: flat ground to build speed on, stairs to walk up without
-## catching, a ramp to surf down, a gap that needs a bunny-hopped landing, and a doorframe —
-## the geometry GoldSrc movement exists to handle gracefully and `move_and_slide` does not.
+## catching, a ramp to surf down, a gap that needs a bunny-hopped landing, a doorframe, a ladder
+## and a pool to climb out of — the geometry GoldSrc movement exists to handle gracefully and
+## `move_and_slide` does not.
 ##
 ## Everything is built in code so the scene file stays a single node and the course is readable
 ## as geometry rather than as a .tscn diff. Keys are read directly rather than through an input
 ## map so the demo needs no project setup.
 ##
-## WASD move · Space jump (re-press on landing to bunny-hop) · Ctrl crouch · Shift walk · B switch box/capsule hull · Esc release mouse
+## WASD move · Space jump (re-press on landing to bunny-hop; swim up; push off a ladder) ·
+## Ctrl crouch (sink) · Shift walk · B switch box/capsule hull · Esc release mouse
 
 const Movement = preload("res://addons/pmove/movement.gd")
 const MovementConfig = preload("res://addons/pmove/movement_config.gd")
 const InputCommand = preload("res://addons/pmove/input_command.gd")
+const LadderWater = preload("res://addons/pmove/ladder_water.gd")
 
 const MOUSE_SENS := 0.0022
+const LAYER_WATER := 2
+const LAYER_LADDER := 4
+# GoldSrc's waterlevel 2: deep enough to swim once the waist is under.
+const WAIST := 0.9
 
 var _cfg := MovementConfig.new()
 var _sim: Movement.Simulation
@@ -25,6 +32,10 @@ var _use_capsule: bool = true
 var _char: CharacterBody3D
 var _camera: Camera3D
 var _readout: Label
+var _driver := LadderWater.Driver.new()
+var _volume_query := PhysicsPointQueryParameters3D.new()
+var _on_ladder := false
+var _in_water := false
 
 var _yaw := 0.0
 var _pitch := 0.0
@@ -57,7 +68,11 @@ func _build_world() -> void:
 	we.environment = env
 	add_child(we)
 
-	_box(Vector3(60, 1, 60), Vector3(0, -0.5, 0))                  # ground
+	# Ground, around a 6 x 8 m hole for the pool.
+	_box(Vector3(9, 1, 60), Vector3(-25.5, -0.5, 0))
+	_box(Vector3(45, 1, 60), Vector3(7.5, -0.5, 0))
+	_box(Vector3(6, 1, 40), Vector3(-18, -0.5, -10))
+	_box(Vector3(6, 1, 12), Vector3(-18, -0.5, 24))
 
 	# Stairs. 0.4 m risers are taller than most controllers will step and inside GoldSrc's
 	# 18-unit sv_stepsize, so walking up these without catching is the whole point of walk_move.
@@ -80,6 +95,22 @@ func _build_world() -> void:
 	# A low lip to crouch under.
 	_box(Vector3(6, 0.4, 0.6), Vector3(16, 1.0, 4))
 
+	# A pool. Its surface is 0.3 m under the ground, so a swimmer at the bank climbs out with a
+	# water-jump, and its floor is deep enough to dive to.
+	_box(Vector3(6, 1, 8), Vector3(-18, -3.0, 14))
+	_box(Vector3(0.5, 2.5, 8), Vector3(-21.25, -1.25, 14))
+	_box(Vector3(0.5, 2.5, 8), Vector3(-14.75, -1.25, 14))
+	_box(Vector3(7, 2.5, 0.5), Vector3(-18, -1.25, 9.75))
+	_box(Vector3(7, 2.5, 0.5), Vector3(-18, -1.25, 18.25))
+	_volume(Vector3(6, 2.2, 8), Vector3(-18, -1.4, 14), LAYER_WATER, Color(0.2, 0.45, 0.9, 0.45))
+
+	# A tower with a ladder up its south face. The ladder runs past the top so a climber's waist
+	# clears the roof before it lets go, and they walk off onto it.
+	_box(Vector3(3, 5, 3), Vector3(12, 2.5, 16))
+	var ladder := _volume(Vector3(1.2, 6.5, 0.8), Vector3(12, 3.25, 17.9), LAYER_LADDER,
+			Color(0.55, 0.35, 0.15, 0.6))
+	ladder.set_meta("normal", Vector3(0, 0, 1))
+
 
 func _box(size: Vector3, pos: Vector3) -> StaticBody3D:
 	var sb := StaticBody3D.new()
@@ -100,6 +131,41 @@ func _box(size: Vector3, pos: Vector3) -> StaticBody3D:
 	sb.add_child(mesh)
 	add_child(sb)
 	return sb
+
+
+## A volume the player is in or out of — water or a ladder — found with a point query.
+func _volume(size: Vector3, pos: Vector3, layer: int, tint: Color) -> Area3D:
+	var area := Area3D.new()
+	area.position = pos
+	area.collision_layer = layer
+	area.collision_mask = 0
+	area.monitoring = false
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = size
+	shape.shape = box
+	area.add_child(shape)
+	var mesh := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = size
+	mesh.mesh = bm
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = tint
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mesh.material_override = mat
+	area.add_child(mesh)
+	add_child(area)
+	return area
+
+
+## The first volume on `layer` at the player's waist, or null.
+func _volume_at_waist(layer: int) -> Area3D:
+	_volume_query.position = _state.position + Vector3(0, WAIST, 0)
+	_volume_query.collide_with_areas = true
+	_volume_query.collide_with_bodies = false
+	_volume_query.collision_mask = layer
+	var hits := get_world_3d().direct_space_state.intersect_point(_volume_query, 1)
+	return hits[0].collider if not hits.is_empty() else null
 
 
 # --- the player ---
@@ -209,6 +275,15 @@ func _physics_process(delta: float) -> void:
 	cmd.pitch = _pitch
 	cmd.delta = delta
 
+	# The game's half of ladders and water: say where they are. The driver picks the move.
+	var ladder := _volume_at_waist(LAYER_LADDER)
+	_on_ladder = ladder != null
+	_in_water = _volume_at_waist(LAYER_WATER) != null
+	var mods := Movement.MovementModifiers.new()
+	_driver.apply(mods, _cfg, _state, cmd, _on_ladder,
+			ladder.get_meta("normal") if _on_ladder else Vector3.ZERO, _in_water,
+			get_world_3d().direct_space_state)
+	mods.apply_to(_state)
 	_sim.simulate_tick(_body, _state, cmd)
 
 	_sync_hull_mesh()
@@ -223,6 +298,7 @@ func _physics_process(delta: float) -> void:
 	if _char.position.y < -20.0:
 		_char.position = Vector3(0, 2, 10)
 		_char.velocity = Vector3.ZERO
+		_driver.reset()
 		_top_speed = 0.0
 
 	var speed := Vector2(_state.velocity.x, _state.velocity.z).length()
@@ -231,6 +307,7 @@ func _physics_process(delta: float) -> void:
 	# tune this are written in: sv_maxspeed 320 is the 8 m/s ground cap.
 	_readout.text = "%.1f m/s  (%d u/s)   top %.1f m/s\n%s%s\nHull: %s  (press B to switch)" % [
 		speed, roundi(speed * 40.0), _top_speed,
-		"ground" if _state.on_floor else "air",
+		"ladder" if _on_ladder else "swimming" if _in_water \
+				else "ground" if _state.on_floor else "air",
 		"  crouched" if _state.is_crouched else "",
 		"capsule" if _use_capsule else "box"]
