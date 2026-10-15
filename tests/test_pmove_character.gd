@@ -4,7 +4,6 @@ extends "res://tests/suite.gd"
 # Preloaded, not the class_name: a fresh checkout (CI) has no class cache to resolve it from.
 const PmoveCharacterScript = preload("res://addons/pmove/pmove_character_3d.gd")
 
-const DT := 1.0 / 60.0
 const LADDER_LAYER := 4
 
 
@@ -35,18 +34,21 @@ func _character(shape: Shape3D = null, at := Vector3(0, 0.01, 0)) -> PmoveCharac
 	return ch
 
 
-func _run_ticks(ch: PmoveCharacterScript, n: int) -> void:
-	for i in n:
-		ch._physics_process(DT)
+## Ticks with the engine's own step, not a constant: move_and_slide integrates over that one
+## whatever delta it is handed, and CI's runner does not run at 60 Hz.
+func _run_seconds(ch: PmoveCharacterScript, seconds: float) -> void:
+	var dt := ch.get_physics_process_delta_time()
+	for i in maxi(roundi(seconds / dt), 1):
+		ch._physics_process(dt)
 
 
 func test_walks_forward_on_its_own_floor() -> void:
 	_floor()
 	var ch := _character()
-	_run_ticks(ch, 5)
+	_run_seconds(ch, 0.1)
 	assert_true(ch.on_floor, "settles onto the floor")
 	ch.move_input = Vector2(0, -1)
-	_run_ticks(ch, 60)
+	_run_seconds(ch, 1.0)
 	assert_lt(ch.position.z, -4.0, "a second of forward walks it down -z")
 	assert_almost_eq(Vector2(ch.velocity.x, ch.velocity.z).length(), ch.config.max_speed, 0.1,
 		"at the config's ground speed")
@@ -57,7 +59,7 @@ func test_turning_the_node_turns_the_walk() -> void:
 	var ch := _character()
 	ch.rotation.y = PI / 2.0
 	ch.move_input = Vector2(0, -1)
-	_run_ticks(ch, 30)
+	_run_seconds(ch, 0.5)
 	assert_lt(ch.position.x, -1.0, "facing +90 degrees, forward is -x")
 	assert_almost_eq(ch.position.z, 0.0, 0.01, "and not -z")
 
@@ -65,15 +67,15 @@ func test_turning_the_node_turns_the_walk() -> void:
 func test_jump_and_land_signal() -> void:
 	_floor()
 	var ch := _character()
-	_run_ticks(ch, 5)
+	_run_seconds(ch, 0.1)
 	var log := {"jumped": 0, "impact": 0.0}
 	ch.jumped.connect(func(): log.jumped += 1)
 	ch.landed.connect(func(speed: float): log.impact = speed)
 	ch.jump = true
-	_run_ticks(ch, 1)
+	_run_seconds(ch, 0.0)
 	ch.jump = false
 	assert_eq(log.jumped, 1, "one jump on the press")
-	_run_ticks(ch, 90)
+	_run_seconds(ch, 1.5)
 	assert_eq(log.jumped, 1, "and no more while airborne")
 	assert_gt(log.impact, 5.0, "lands at about the speed it left with")
 	assert_true(ch.on_floor, "and is back on the floor")
@@ -82,9 +84,9 @@ func test_jump_and_land_signal() -> void:
 func test_a_velocity_write_is_kept() -> void:
 	_floor()
 	var ch := _character()
-	_run_ticks(ch, 5)
+	_run_seconds(ch, 0.1)
 	ch.velocity = Vector3(0, 8, 0)
-	_run_ticks(ch, 10)
+	_run_seconds(ch, 1.0 / 6.0)
 	assert_gt(ch.position.y, 0.5, "a launch the game set carries the body up")
 
 
@@ -96,7 +98,7 @@ func test_crouch_leaves_a_shared_shape_alone() -> void:
 	var a := _character(shared, Vector3(-2, 0.01, 0))
 	var b := _character(shared, Vector3(2, 0.01, 0))
 	a.crouch = true
-	_run_ticks(a, 60)
+	_run_seconds(a, 1.0)
 	assert_true(a.is_crouched, "the crouching one is crouched")
 	var b_shape := (b.get_child(0) as CollisionShape3D).shape as CapsuleShape3D
 	assert_almost_eq(b_shape.height, b.config.stand_height, 0.001, "its neighbour still stands")
@@ -119,8 +121,8 @@ func test_climbs_a_ladder_volume() -> void:
 
 	var ch := _character()
 	ch.ladder_layers = LADDER_LAYER
-	_run_ticks(ch, 2)
+	_run_seconds(ch, 1.0 / 30.0)
 	assert_true(ch.on_ladder, "the waist is in the volume")
 	ch.move_input = Vector2(0, -1)
-	_run_ticks(ch, 30)
+	_run_seconds(ch, 0.5)
 	assert_gt(ch.position.y, 1.5, "forward into the ladder's +Z face climbs")
