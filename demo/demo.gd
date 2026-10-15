@@ -1,50 +1,40 @@
 extends Node3D
 ## A course for feeling the movement: flat ground to build speed on, stairs to walk up without
-## catching, a ramp to surf down, a gap that needs a bunny-hopped landing, a doorframe, a ladder
-## and a pool to climb out of — the geometry GoldSrc movement exists to handle gracefully and
-## `move_and_slide` does not.
+## catching, a ramp to surf down, a gap that needs a bunny-hopped landing, a doorframe, a ladder,
+## a pool to climb out of, a lift and a turntable — the geometry GoldSrc movement exists to handle
+## gracefully and `move_and_slide` does not.
 ##
 ## Everything is built in code so the scene file stays a single node and the course is readable
-## as geometry rather than as a .tscn diff. Keys are read directly rather than through an input
-## map so the demo needs no project setup.
+## as geometry rather than as a .tscn diff. The input actions are registered in code too, so the
+## demo needs no project setup.
 ##
 ## WASD move · Space jump (re-press on landing to bunny-hop; swim up; push off a ladder) ·
 ## Ctrl crouch (sink) · Shift walk · B switch box/capsule hull · Esc release mouse
 
-const Movement = preload("res://addons/pmove/movement.gd")
-const MovementConfig = preload("res://addons/pmove/movement_config.gd")
-const InputCommand = preload("res://addons/pmove/input_command.gd")
-const LadderWater = preload("res://addons/pmove/ladder_water.gd")
+# Preloaded, not the class_name: a fresh checkout has no class cache to resolve it from.
+const PmoveCharacterScript = preload("res://addons/pmove/pmove_character_3d.gd")
 
 const MOUSE_SENS := 0.0022
 const LAYER_WATER := 2
 const LAYER_LADDER := 4
-# GoldSrc's waterlevel 2: deep enough to swim once the waist is under.
-const WAIST := 0.9
+const SPAWN := Vector3(0, 2, 10)
 
-var _cfg := MovementConfig.new()
-var _sim: Movement.Simulation
-var _state: Movement.MovementState
-var _body: GodotBody
 var _hull_shape: CollisionShape3D
 var _hull_mesh: MeshInstance3D
 var _use_capsule: bool = true
-var _char: CharacterBody3D
+var _char: PmoveCharacterScript
 var _camera: Camera3D
 var _readout: Label
-var _driver := LadderWater.Driver.new()
-var _volume_query := PhysicsPointQueryParameters3D.new()
-var _on_ladder := false
-var _in_water := false
 
-var _yaw := 0.0
 var _pitch := 0.0
+var _lift: AnimatableBody3D
+var _turntable: AnimatableBody3D
+var _clock := 0.0
 var _top_speed := 0.0
 
 
 func _ready() -> void:
-	_sim = Movement.Simulation.new(_cfg)
-	_state = Movement.MovementState.new()
+	_bind_keys()
 	_build_world()
 	_build_player()
 	_build_hud()
@@ -95,6 +85,10 @@ func _build_world() -> void:
 	# A low lip to crouch under.
 	_box(Vector3(6, 0.4, 0.6), Vector3(16, 1.0, 4))
 
+	# Movers are AnimatableBody3Ds: the character rides them and turns with them.
+	_lift = _box(Vector3(3, 0.3, 3), Vector3(15.7, 0.15, 16), true)
+	_turntable = _box(Vector3(7, 0.3, 7), Vector3(20, 0.15, -20), true)
+
 	# A pool. Its surface is 0.3 m under the ground, so a swimmer at the bank climbs out with a
 	# water-jump, and its floor is deep enough to dive to.
 	_box(Vector3(6, 1, 8), Vector3(-18, -3.0, 14))
@@ -104,16 +98,15 @@ func _build_world() -> void:
 	_box(Vector3(7, 2.5, 0.5), Vector3(-18, -1.25, 18.25))
 	_volume(Vector3(6, 2.2, 8), Vector3(-18, -1.4, 14), LAYER_WATER, Color(0.2, 0.45, 0.9, 0.45))
 
-	# A tower with a ladder up its south face. The ladder runs past the top so a climber's waist
-	# clears the roof before it lets go, and they walk off onto it.
+	# A tower with a ladder up its south face, which is the volume's +Z. The ladder runs past the
+	# top so a climber's waist clears the roof before it lets go, and they walk off onto it.
 	_box(Vector3(3, 5, 3), Vector3(12, 2.5, 16))
-	var ladder := _volume(Vector3(1.2, 6.5, 0.8), Vector3(12, 3.25, 17.9), LAYER_LADDER,
+	_volume(Vector3(1.2, 6.5, 0.8), Vector3(12, 3.25, 17.9), LAYER_LADDER,
 			Color(0.55, 0.35, 0.15, 0.6))
-	ladder.set_meta("normal", Vector3(0, 0, 1))
 
 
-func _box(size: Vector3, pos: Vector3) -> StaticBody3D:
-	var sb := StaticBody3D.new()
+func _box(size: Vector3, pos: Vector3, mover := false) -> PhysicsBody3D:
+	var sb: PhysicsBody3D = AnimatableBody3D.new() if mover else StaticBody3D.new()
 	sb.position = pos
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
@@ -133,7 +126,7 @@ func _box(size: Vector3, pos: Vector3) -> StaticBody3D:
 	return sb
 
 
-## A volume the player is in or out of — water or a ladder — found with a point query.
+## A volume the player is in or out of — water or a ladder.
 func _volume(size: Vector3, pos: Vector3, layer: int, tint: Color) -> Area3D:
 	var area := Area3D.new()
 	area.position = pos
@@ -158,32 +151,24 @@ func _volume(size: Vector3, pos: Vector3, layer: int, tint: Color) -> Area3D:
 	return area
 
 
-## The first volume on `layer` at the player's waist, or null.
-func _volume_at_waist(layer: int) -> Area3D:
-	_volume_query.position = _state.position + Vector3(0, WAIST, 0)
-	_volume_query.collide_with_areas = true
-	_volume_query.collide_with_bodies = false
-	_volume_query.collision_mask = layer
-	var hits := get_world_3d().direct_space_state.intersect_point(_volume_query, 1)
-	return hits[0].collider if not hits.is_empty() else null
-
-
 # --- the player ---
 
 func _build_player() -> void:
-	_char = CharacterBody3D.new()
-	_char.position = Vector3(0, 2, 10)
-	# GoldSrc treats anything up to ~45 degrees as standable; the kernel's WALK_NORMAL_Y agrees.
-	_char.floor_max_angle = deg_to_rad(46.0)
-	# walk_move does its own stepping, and the kernel owns rider carry, so Godot's helpers for
-	# both stay off — two systems solving the same problem fight each other.
-	_char.floor_snap_length = 0.0
-	_char.platform_floor_layers = 0
+	_char = PmoveCharacterScript.new()
+	_char.position = SPAWN
+	_char.ladder_layers = LAYER_LADDER
+	_char.water_layers = LAYER_WATER
+	_char.action_left = &"move_left"
+	_char.action_right = &"move_right"
+	_char.action_forward = &"move_forward"
+	_char.action_back = &"move_back"
+	_char.action_jump = &"jump"
+	_char.action_crouch = &"crouch"
+	_char.action_walk = &"walk"
 
 	_hull_shape = CollisionShape3D.new()
-	_hull_shape.position.y = _cfg.stand_height * 0.5
 	_char.add_child(_hull_shape)
-	_set_hull(_cfg.stand_height)
+	_set_hull(1.8)
 
 	_hull_mesh = MeshInstance3D.new()
 	var mat := StandardMaterial3D.new()
@@ -195,8 +180,6 @@ func _build_player() -> void:
 	add_child(_camera)
 
 	add_child(_char)
-	_body = GodotBody.new(_char)
-	_state.bind_body(_body)
 
 
 ## A fresh shape of the chosen kind at `height`. The centre is left alone: crouching in the
@@ -251,9 +234,22 @@ func _build_hud() -> void:
 
 # --- input ---
 
+func _bind_keys() -> void:
+	for pair in [[&"move_left", KEY_A], [&"move_right", KEY_D], [&"move_forward", KEY_W],
+			[&"move_back", KEY_S], [&"jump", KEY_SPACE], [&"crouch", KEY_CTRL],
+			[&"walk", KEY_SHIFT]]:
+		if InputMap.has_action(pair[0]):
+			continue
+		InputMap.add_action(pair[0])
+		var ev := InputEventKey.new()
+		ev.physical_keycode = pair[1]
+		InputMap.action_add_event(pair[0], ev)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
-		_yaw -= event.relative.x * MOUSE_SENS
+		# Turning the character turns its walk, and keeps whatever a turntable has added.
+		_char.rotation.y -= event.relative.x * MOUSE_SENS
 		_pitch = clampf(_pitch - event.relative.y * MOUSE_SENS, -PI / 2.0, PI / 2.0)
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
@@ -264,50 +260,35 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	var cmd := InputCommand.new()
-	cmd.move_input = Vector2(
-		float(Input.is_physical_key_pressed(KEY_D)) - float(Input.is_physical_key_pressed(KEY_A)),
-		float(Input.is_physical_key_pressed(KEY_S)) - float(Input.is_physical_key_pressed(KEY_W)))
-	cmd.jump = Input.is_physical_key_pressed(KEY_SPACE)
-	cmd.crouch = Input.is_physical_key_pressed(KEY_CTRL)
-	cmd.walk = Input.is_physical_key_pressed(KEY_SHIFT)
-	cmd.yaw = _yaw
-	cmd.pitch = _pitch
-	cmd.delta = delta
+	# The lift runs from the ground to the tower's roof and back every 8 s; the turntable turns.
+	# This node is the character's parent, so both move before the character's own tick.
+	_clock += delta
+	_lift.position.y = lerpf(0.15, 4.85, 0.5 - 0.5 * cos(_clock * TAU / 8.0))
+	_turntable.rotation.y = _clock * 0.6
 
-	# The game's half of ladders and water: say where they are. The driver picks the move.
-	var ladder := _volume_at_waist(LAYER_LADDER)
-	_on_ladder = ladder != null
-	_in_water = _volume_at_waist(LAYER_WATER) != null
-	var mods := Movement.MovementModifiers.new()
-	_driver.apply(mods, _cfg, _state, cmd, _on_ladder,
-			ladder.get_meta("normal") if _on_ladder else Vector3.ZERO, _in_water,
-			get_world_3d().direct_space_state)
-	mods.apply_to(_state)
-	_sim.simulate_tick(_body, _state, cmd)
-
+	# The character moves itself; this only aims it and follows it.
+	_char.pitch = _pitch
 	_sync_hull_mesh()
 
 	# Third-person camera: orbit behind the player and always frame its centre, so
 	# tilting the view never loses the capsule.
 	var pivot := _hull_shape.global_position
-	var offset := Basis(Vector3.UP, _yaw) * Vector3(0.0, 4.0 + _pitch * 2.0, 6.0)
+	var offset := Basis(Vector3.UP, _char.rotation.y) * Vector3(0.0, 4.0 + _pitch * 2.0, 6.0)
 	_camera.global_position = pivot + offset
 	_camera.look_at(pivot, Vector3.UP)
 
 	if _char.position.y < -20.0:
-		_char.position = Vector3(0, 2, 10)
+		_char.position = SPAWN
 		_char.velocity = Vector3.ZERO
-		_driver.reset()
 		_top_speed = 0.0
 
-	var speed := Vector2(_state.velocity.x, _state.velocity.z).length()
+	var speed := Vector2(_char.velocity.x, _char.velocity.z).length()
 	_top_speed = maxf(_top_speed, speed)
 	# Shown in GoldSrc units too (40 u = 1 m), since that is the vocabulary the numbers that
 	# tune this are written in: sv_maxspeed 320 is the 8 m/s ground cap.
 	_readout.text = "%.1f m/s  (%d u/s)   top %.1f m/s\n%s%s\nHull: %s  (press B to switch)" % [
 		speed, roundi(speed * 40.0), _top_speed,
-		"ladder" if _on_ladder else "swimming" if _in_water \
-				else "ground" if _state.on_floor else "air",
-		"  crouched" if _state.is_crouched else "",
+		"ladder" if _char.on_ladder else "swimming" if _char.in_water \
+				else "ground" if _char.on_floor else "air",
+		"  crouched" if _char.is_crouched else "",
 		"capsule" if _use_capsule else "box"]
