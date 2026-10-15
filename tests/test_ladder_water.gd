@@ -75,6 +75,13 @@ func test_water_drags() -> void:
 		"with no wish, speed drops by water_friction")
 
 
+func test_drag_accelerate_takes_its_own_drag() -> void:
+	var v := LadderWater.drag_accelerate(Vector3(5, 0, 0), Vector3.ZERO, 0.1, 3.0, 10.0)
+	assert_almost_eq(v.x, 5.0 * (1.0 - 3.0 * 0.1), 0.001, "speed drops by the drag it is given")
+	var up := LadderWater.drag_accelerate(Vector3.ZERO, Vector3(0, 10, 0), 0.01, 3.0, 10.0)
+	assert_almost_eq(up.y, 1.0, 0.001, "and accelerates toward the wish at accelerate * speed")
+
+
 func _bank(top_y: float) -> void:
 	# A wall 0.5 m north of the origin, standing from -2 to top_y.
 	var sb := StaticBody3D.new()
