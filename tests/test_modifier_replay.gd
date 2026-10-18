@@ -46,6 +46,7 @@ func _run_tests() -> void:
 	_run_method("test_gravity_change_replayed_correctly")
 	_run_method("test_stored_modifiers_provide_baseline_during_replay")
 	_run_method("test_speed_scale_change_replayed_correctly")
+	_run_method("test_velocity_add_adds")
 
 
 ## Core test: client predicts 10 ticks at gravity 1.0, then 10 ticks at gravity
@@ -212,3 +213,19 @@ func test_speed_scale_change_replayed_correctly() -> void:
 	# Z position should be close to expected (speed changed mid-stream)
 	assert_almost_eq(body.global_position.z, expected_pos.z, 0.15,
 		"Z must reflect per-tick speed_scale replay")
+
+
+## velocity_add: added to the velocity (after velocity_impulse, which replaces components).
+func test_velocity_add_adds() -> void:
+	var state := Movement.MovementState.new()
+	state.velocity = Vector3(3.0, -1.0, 4.0)
+	var mods := Movement.MovementModifiers.new()
+	mods.velocity_add = Vector3(1.0, 0.0, -2.0)
+	mods.apply_to(state)
+	assert_true(state.velocity.is_equal_approx(Vector3(4.0, -1.0, 2.0)), "added, not replaced")
+
+	var both := Movement.MovementState.new()
+	both.velocity = Vector3(3.0, -1.0, 4.0)
+	mods.velocity_impulse = Vector3(0.0, 5.0, 0.0)
+	mods.apply_to(both)
+	assert_true(both.velocity.is_equal_approx(Vector3(4.0, 5.0, 2.0)), "after the impulse sets y")

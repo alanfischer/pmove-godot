@@ -147,6 +147,9 @@ class MovementModifiers:
 	## Non-zero components SET state.velocity (not added) — e.g. levitate sets y,
 	## a knockback could set x/z. Zero components are left untouched.
 	var velocity_impulse: Vector3 = Vector3.ZERO
+	## Velocity ADDED this tick, after velocity_impulse — a kick, a knockback, a
+	## self-cast push. Where velocity_impulse replaces components, this adds to them.
+	var velocity_add: Vector3 = Vector3.ZERO
 	## GoldSrc basevelocity: push force for this tick (applied to movement, not player state).
 	var base_velocity: Vector3 = Vector3.ZERO
 	## Skip ground friction this tick (e.g. icy surface, separate from basevelocity).
@@ -179,6 +182,7 @@ class MovementModifiers:
 		if velocity_impulse.x != 0.0: state.velocity.x = velocity_impulse.x
 		if velocity_impulse.y != 0.0: state.velocity.y = velocity_impulse.y
 		if velocity_impulse.z != 0.0: state.velocity.z = velocity_impulse.z
+		state.velocity += velocity_add
 
 
 # --- Pure static helpers (no cfg needed) ---
