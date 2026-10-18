@@ -67,7 +67,7 @@ func unpack_flags(flags: int) -> void:
 	noclip = (flags & FLAG_NOCLIP) != 0
 
 
-## Serialize to an array for network transmission.
+## Serialize to an array for network transmission. (encode_batch() is the compact form.)
 ## Format: [seq, move_x, move_y, yaw, pitch, flags, delta, custom_flags, head_x, head_y]
 func pack_wire() -> Array:
 	return [seq, move_input.x, move_input.y, yaw, pitch, pack_flags(), delta,
@@ -110,6 +110,263 @@ func pack_binary(buf: PackedByteArray, offset: int) -> void:
 	buf.encode_u16(offset + 25,   custom_flags)
 	buf.encode_float(offset + 27, head_delta.x)
 	buf.encode_float(offset + 31, head_delta.y)
+
+
+# --- Batch wire format: quantized and delta-coded (GoldSrc usercmd style) ---
+#
+# A packet carries a run of consecutive commands (the new one plus backups). Each is coded against
+# the one before it in the packet — the first against an all-zero command — as a field mask and only
+# the fields that changed, so a backup that repeats its neighbour costs a byte or two. Angles travel
+# as 16 bits and move axes as 8, the precision GoldSrc's usercmd uses.
+#
+#   u8 count, uvarint first seq, then per command:
+#   u8 mask, [uvarint seq gap - 1], [s8 move_x, s8 move_y], [s16 yaw], [s16 pitch], [u8 flags],
+#   [f32 delta], [u16 custom_flags], [f32 head_x, f32 head_y]
+#
+# The lossy fields only round-trip exactly if the client predicts with the rounded values too, so
+# a client calls quantize() on each command before predicting it. Then server and client simulate
+# identical numbers.
+
+const ANGLE_SCALE := 32767.0 / PI  ## radians -> s16 over [-PI, PI]
+const MOVE_SCALE := 127.0          ## move axis -> s8 over [-1, 1]
+## Most commands one batch may carry (the count is a byte).
+const BATCH_MAX := 255
+
+const _B_MOVE := 1
+const _B_YAW := 2
+const _B_PITCH := 4
+const _B_FLAGS := 8
+const _B_DELTA := 16
+const _B_CUSTOM := 32
+const _B_HEAD := 64
+const _B_SEQ_GAP := 128
+
+
+## Round every field to what decode_batch() will reproduce, so a client predicts with exactly the
+## values the server will simulate. Idempotent. Angles are wrapped to [-PI, PI].
+func quantize() -> void:
+	move_input = Vector2(_move_from(_move_to(move_input.x)), _move_from(_move_to(move_input.y)))
+	yaw = _angle_from(_angle_to(yaw))
+	pitch = _angle_from(_angle_to(pitch))
+	delta = _f32(delta)
+	head_delta = Vector2(_f32(head_delta.x), _f32(head_delta.y))
+
+
+static func _move_to(v: float) -> int:
+	return clampi(roundi(v * MOVE_SCALE), -127, 127)
+
+
+static func _move_from(i: int) -> float:
+	return i / MOVE_SCALE
+
+
+static func _angle_to(a: float) -> int:
+	return clampi(roundi(wrapf(a, -PI, PI) * ANGLE_SCALE), -32767, 32767)
+
+
+static func _angle_from(i: int) -> float:
+	return i / ANGLE_SCALE
+
+
+static var _f32_buf := PackedByteArray([0, 0, 0, 0])
+
+static func _f32(v: float) -> float:
+	_f32_buf.encode_float(0, v)
+	return _f32_buf.decode_float(0)
+
+
+## Encode a run of commands, oldest first, seqs ascending. Quantizes as it goes, so a command that
+## wasn't quantize()d still encodes — but the client should have predicted with quantized values.
+static func encode_batch(cmds: Array) -> PackedByteArray:
+	var n := mini(cmds.size(), BATCH_MAX)
+	var buf := PackedByteArray()
+	if n == 0:
+		return buf
+	var first := cmds.size() - n
+	buf.resize(6 + n * 27)
+	var o := 0
+	buf.encode_u8(o, n)
+	o += 1
+	o = _put_uvarint(buf, o, cmds[first].seq)
+	var p_seq: int = cmds[first].seq - 1
+	var p_mx := 0
+	var p_my := 0
+	var p_yaw := 0
+	var p_pitch := 0
+	var p_flags := 0
+	var p_delta := 0.0
+	var p_custom := 0
+	var p_head := Vector2.ZERO
+	for i in range(first, cmds.size()):
+		var cmd = cmds[i]
+		var mx := _move_to(cmd.move_input.x)
+		var my := _move_to(cmd.move_input.y)
+		var qy := _angle_to(cmd.yaw)
+		var qp := _angle_to(cmd.pitch)
+		var flags: int = cmd.pack_flags()
+		var d := _f32(cmd.delta)
+		var custom: int = cmd.custom_flags & 0xFFFF
+		var head := Vector2(_f32(cmd.head_delta.x), _f32(cmd.head_delta.y))
+		var mask := 0
+		if cmd.seq != p_seq + 1:
+			mask |= _B_SEQ_GAP
+		if mx != p_mx or my != p_my:
+			mask |= _B_MOVE
+		if qy != p_yaw:
+			mask |= _B_YAW
+		if qp != p_pitch:
+			mask |= _B_PITCH
+		if flags != p_flags:
+			mask |= _B_FLAGS
+		if d != p_delta:
+			mask |= _B_DELTA
+		if custom != p_custom:
+			mask |= _B_CUSTOM
+		if head != p_head:
+			mask |= _B_HEAD
+		buf.encode_u8(o, mask)
+		o += 1
+		if mask & _B_SEQ_GAP:
+			o = _put_uvarint(buf, o, cmd.seq - p_seq - 1)
+		if mask & _B_MOVE:
+			buf.encode_s8(o, mx)
+			buf.encode_s8(o + 1, my)
+			o += 2
+		if mask & _B_YAW:
+			buf.encode_s16(o, qy)
+			o += 2
+		if mask & _B_PITCH:
+			buf.encode_s16(o, qp)
+			o += 2
+		if mask & _B_FLAGS:
+			buf.encode_u8(o, flags)
+			o += 1
+		if mask & _B_DELTA:
+			buf.encode_float(o, d)
+			o += 4
+		if mask & _B_CUSTOM:
+			buf.encode_u16(o, custom)
+			o += 2
+		if mask & _B_HEAD:
+			buf.encode_float(o, head.x)
+			buf.encode_float(o + 4, head.y)
+			o += 8
+		p_seq = cmd.seq
+		p_mx = mx
+		p_my = my
+		p_yaw = qy
+		p_pitch = qp
+		p_flags = flags
+		p_delta = d
+		p_custom = custom
+		p_head = head
+	buf.resize(o)
+	return buf
+
+
+## Decode a batch from encode_batch(). Network input, so it's bounds-checked throughout: a
+## truncated or malformed buffer yields an empty array, never a partial one or an engine error.
+static func decode_batch(buf: PackedByteArray) -> Array:
+	var r := _Reader.new(buf)
+	var n := r.u8()
+	var seq := r.uvarint() - 1
+	var out: Array = []
+	if r.failed or n == 0:
+		return []
+	var script := _script()
+	var mx := 0
+	var my := 0
+	var qy := 0
+	var qp := 0
+	var flags := 0
+	var d := 0.0
+	var custom := 0
+	var head := Vector2.ZERO
+	for i in n:
+		var mask := r.u8()
+		seq += 1 + (r.uvarint() if mask & _B_SEQ_GAP else 0)
+		if mask & _B_MOVE:
+			mx = r.s8()
+			my = r.s8()
+		if mask & _B_YAW:
+			qy = r.s16()
+		if mask & _B_PITCH:
+			qp = r.s16()
+		if mask & _B_FLAGS:
+			flags = r.u8()
+		if mask & _B_DELTA:
+			d = r.f32()
+		if mask & _B_CUSTOM:
+			custom = r.u16()
+		if mask & _B_HEAD:
+			head = Vector2(r.f32(), r.f32())
+		if r.failed:
+			return []
+		var cmd = script.new()
+		cmd.seq = seq
+		cmd.move_input = Vector2(_move_from(mx), _move_from(my))
+		cmd.yaw = _angle_from(qy)
+		cmd.pitch = _angle_from(qp)
+		cmd.unpack_flags(flags)
+		cmd.delta = d
+		cmd.custom_flags = custom
+		cmd.head_delta = head
+		out.append(cmd)
+	return out
+
+
+static func _put_uvarint(buf: PackedByteArray, o: int, v: int) -> int:
+	while v >= 0x80:
+		buf.encode_u8(o, (v & 0x7F) | 0x80)
+		o += 1
+		v >>= 7
+	buf.encode_u8(o, v)
+	return o + 1
+
+
+## Bounds-checked reads: past the end, failed is set and every read yields 0.
+class _Reader:
+	var buf: PackedByteArray
+	var pos := 0
+	var failed := false
+
+	func _init(p_buf: PackedByteArray) -> void:
+		buf = p_buf
+
+	func _take(size: int) -> bool:
+		if failed or pos + size > buf.size():
+			failed = true
+			return false
+		pos += size
+		return true
+
+	func u8() -> int:
+		return buf.decode_u8(pos - 1) if _take(1) else 0
+
+	func s8() -> int:
+		return buf.decode_s8(pos - 1) if _take(1) else 0
+
+	func u16() -> int:
+		return buf.decode_u16(pos - 2) if _take(2) else 0
+
+	func s16() -> int:
+		return buf.decode_s16(pos - 2) if _take(2) else 0
+
+	func f32() -> float:
+		return buf.decode_float(pos - 4) if _take(4) else 0.0
+
+	## Stops consuming payload once 63 bits are in, so an over-long run can't overflow.
+	func uvarint() -> int:
+		var v := 0
+		var shift := 0
+		while true:
+			var b := u8()
+			if shift < 63:
+				v |= (b & 0x7F) << shift
+				shift += 7
+			if failed or (b & 0x80) == 0:
+				break
+		return v
 
 
 ## Cached self-script. Can't be a preload const (the file self-references and

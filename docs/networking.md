@@ -152,17 +152,26 @@ cmd.yaw = rotation.y
 cmd.pitch = camera.rotation.x
 cmd.jump = Input.is_action_pressed("jump")
 cmd.delta = delta
+cmd.quantize()  # round to what the wire carries, so the server simulates exactly this
 
 client_movement.predict(body, cmd, modifier_cb)
 
-send_cmd_to_server(cmd)  # pack with cmd.pack_binary() for efficient batching
+recent.append(cmd)
+send_to_server(InputCommand.encode_batch(recent.slice(-3)))  # the new command plus two backups
 ```
+
+`encode_batch` quantizes angles to 16 bits and move axes to 8, as GoldSrc's usercmd does, and
+codes each command against the one before it in the packet, so a backup that repeats its
+neighbour costs a byte. A running player's command plus two backups is about 21 bytes. The client
+must predict with the quantized values — that's what `quantize()` is for — or every reconcile
+will find a sub-millimetre mismatch that's entirely self-inflicted.
 
 ### Server (each physics frame, per player)
 
 ```gdscript
-# On receiving an input batch:
-server_movement.enqueue(InputCommand.unpack_binary(buf, offset))
+# On receiving an input batch (decode_batch returns [] for a malformed one):
+for cmd in InputCommand.decode_batch(buf):
+    server_movement.enqueue(cmd)  # drops seqs already processed or queued
 
 # Each physics frame:
 server_movement.process_queue(body, modifier_cb)

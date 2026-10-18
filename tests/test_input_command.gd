@@ -10,6 +10,12 @@ func _run_tests() -> void:
 	_run_method("test_wire_roundtrip")
 	_run_method("test_binary_roundtrip")
 	_run_method("test_binary_batch_roundtrip")
+	_run_method("test_quantize_is_idempotent")
+	_run_method("test_batch_roundtrip_is_exact_once_quantized")
+	_run_method("test_batch_size")
+	_run_method("test_batch_seq_gaps")
+	_run_method("test_batch_rejects_truncation")
+	_run_method("test_batch_survives_garbage")
 
 
 func test_pack_unpack_roundtrip() -> void:
@@ -169,3 +175,101 @@ func test_default_values() -> void:
 	assert_false(cmd.walk, "default walk")
 	assert_false(cmd.noclip, "default noclip")
 	assert_almost_eq(cmd.delta, 0.0, 0.001, "default delta")
+
+
+# --- compact batch format ---
+
+func _cmd(seq: int, move: Vector2, yaw: float, pitch: float, flags: int = 0) -> RefCounted:
+	var cmd := IC.new()
+	cmd.seq = seq
+	cmd.move_input = move
+	cmd.yaw = yaw
+	cmd.pitch = pitch
+	cmd.unpack_flags(flags)
+	cmd.delta = 1.0 / 60.0
+	return cmd
+
+
+func _same(a, b) -> bool:
+	return (a.seq == b.seq and a.move_input == b.move_input and a.yaw == b.yaw and a.pitch == b.pitch
+			and a.pack_flags() == b.pack_flags() and a.delta == b.delta
+			and a.custom_flags == b.custom_flags and a.head_delta == b.head_delta)
+
+
+func test_quantize_is_idempotent() -> void:
+	var cmd := _cmd(1, Vector2(0.70710678, -0.3), 7.5, -1.2)
+	cmd.head_delta = Vector2(0.0123456789, -0.5)
+	cmd.quantize()
+	var once := [cmd.move_input, cmd.yaw, cmd.pitch, cmd.delta, cmd.head_delta]
+	cmd.quantize()
+	assert_eq([cmd.move_input, cmd.yaw, cmd.pitch, cmd.delta, cmd.head_delta], once, "a second quantize changes nothing")
+	assert_true(absf(cmd.yaw - wrapf(7.5, -PI, PI)) < 0.0002, "yaw wraps into [-PI, PI] and stays close")
+	assert_true(absf(cmd.move_input.x - 0.70710678) < 0.005, "move keeps 8-bit precision")
+
+
+## The property prediction depends on: what the server decodes is exactly what the client predicted.
+func test_batch_roundtrip_is_exact_once_quantized() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var cmds: Array = []
+	for i in 40:
+		var cmd := _cmd(1000 + i, Vector2(rng.randf_range(-1, 1), rng.randf_range(-1, 1)),
+				rng.randf_range(-10, 10), rng.randf_range(-1.6, 1.6), rng.randi_range(0, 15))
+		cmd.custom_flags = rng.randi_range(0, 0xFFFF)
+		if i % 5 == 0:
+			cmd.head_delta = Vector2(rng.randf_range(-0.1, 0.1), rng.randf_range(-0.1, 0.1))
+		if i % 7 == 0:
+			cmd.delta = rng.randf_range(0.01, 0.05)
+		cmd.quantize()
+		cmds.append(cmd)
+	var out := IC.decode_batch(IC.encode_batch(cmds))
+	assert_eq(out.size(), cmds.size(), "every command decoded")
+	for i in mini(out.size(), cmds.size()):
+		assert_true(_same(out[i], cmds[i]), "command %d decodes to exactly what was predicted" % i)
+
+
+func test_batch_size() -> void:
+	# The steady case: a player running and turning, new command plus two backups.
+	var cmds: Array = []
+	for i in 3:
+		cmds.append(_cmd(100000 + i, Vector2(0, -1), 1.0 + i * 0.01, -0.1))
+	var buf := IC.encode_batch(cmds)
+	assert_true(buf.size() <= 24, "3 running commands in %d bytes (was 105)" % buf.size())
+	# Standing still: backups that repeat their neighbour cost one byte each.
+	var idle: Array = []
+	for i in 3:
+		idle.append(_cmd(100000 + i, Vector2.ZERO, 1.0, -0.1))
+	var idle_buf := IC.encode_batch(idle)
+	assert_eq(idle_buf.size(), IC.encode_batch([idle[0]]).size() + 2, "an unchanged backup costs one byte")
+
+
+func test_batch_seq_gaps() -> void:
+	var cmds := [_cmd(10, Vector2.ZERO, 0, 0), _cmd(11, Vector2.ZERO, 0, 0),
+			_cmd(25, Vector2.ZERO, 0, 0), _cmd(300, Vector2.ZERO, 0, 0)]
+	var out := IC.decode_batch(IC.encode_batch(cmds))
+	assert_eq(out.map(func(c): return c.seq), [10, 11, 25, 300], "seqs with gaps survive")
+
+
+func test_batch_rejects_truncation() -> void:
+	var cmds: Array = []
+	for i in 5:
+		var cmd := _cmd(500 + i, Vector2(0.5, -1), i * 0.3, 0.2, 1)
+		cmd.head_delta = Vector2(0.01, 0.02)
+		cmd.custom_flags = i
+		cmds.append(cmd)
+	var buf := IC.encode_batch(cmds)
+	for n in buf.size():
+		assert_eq(IC.decode_batch(buf.slice(0, n)).size(), 0, "a batch cut to %d bytes decodes to nothing" % n)
+	assert_eq(IC.decode_batch(PackedByteArray()).size(), 0, "empty buffer")
+
+
+func test_batch_survives_garbage() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 99
+	for trial in 500:
+		var buf := PackedByteArray()
+		buf.resize(rng.randi_range(0, 64))
+		for i in buf.size():
+			buf[i] = rng.randi_range(0, 255)
+		var out := IC.decode_batch(buf)
+		assert_true(out.size() <= IC.BATCH_MAX, "garbage decodes to at most a batch")
