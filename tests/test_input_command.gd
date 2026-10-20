@@ -16,6 +16,9 @@ func _run_tests() -> void:
 	_run_method("test_batch_seq_gaps")
 	_run_method("test_batch_rejects_truncation")
 	_run_method("test_batch_survives_garbage")
+	_run_method("test_quantize_rounds_delta_to_ms")
+	_run_method("test_fields_roundtrip_is_exact_once_quantized")
+	_run_method("test_command_delta_adds_up_to_real_time")
 
 
 func test_pack_unpack_roundtrip() -> void:
@@ -273,3 +276,45 @@ func test_batch_survives_garbage() -> void:
 			buf[i] = rng.randi_range(0, 255)
 		var out := IC.decode_batch(buf)
 		assert_true(out.size() <= IC.BATCH_MAX, "garbage decodes to at most a batch")
+
+
+func test_quantize_rounds_delta_to_ms() -> void:
+	var cmd := _cmd(1, Vector2.ZERO, 0, 0)
+	cmd.quantize()
+	assert_eq(roundi(cmd.delta * 1000.0), 17, "1/60 s rounds to 17 ms")
+	assert_almost_eq(cmd.delta, 0.017, 1e-6, "and travels as exactly that")
+
+
+## As for the batch: what a transport delivers from the fields is exactly what the client predicted.
+func test_fields_roundtrip_is_exact_once_quantized() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	for i in 40:
+		var cmd := _cmd(1000 + i, Vector2(rng.randf_range(-1, 1), rng.randf_range(-1, 1)),
+				rng.randf_range(-10, 10), rng.randf_range(-1.6, 1.6), rng.randi_range(0, 15))
+		cmd.custom_flags = rng.randi_range(0, 0xFFFF)
+		if i % 5 == 0:
+			cmd.head_delta = Vector2(rng.randf_range(-0.1, 0.1), rng.randf_range(-0.1, 0.1))
+		if i % 7 == 0:
+			cmd.delta = rng.randf_range(0.01, 0.05)
+		cmd.quantize()
+		var f: Array = cmd.to_fields()
+		assert_eq(f.size(), IC.FIELD_TYPES.size(), "every field")
+		for k in f.size():
+			assert_eq(typeof(f[k]), IC.FIELD_TYPES[k], "field %d has its declared type" % k)
+		var out = IC.from_fields(f)
+		assert_true(_same(out, cmd), "command %d rebuilds to exactly what was predicted" % i)
+	assert_eq(IC.from_fields([1, 2, 3]), null, "a short array rebuilds nothing")
+
+
+func test_command_delta_adds_up_to_real_time() -> void:
+	var cm = preload("res://addons/pmove/client_movement.gd").new()
+	var total := 0.0
+	var seen := {}
+	for i in 600:
+		var d: float = cm.command_delta(1.0 / 60.0)
+		assert_almost_eq(d * 1000.0, roundf(d * 1000.0), 1e-9, "a whole number of ms")
+		seen[roundi(d * 1000.0)] = true
+		total += d
+	assert_almost_eq(total, 10.0, 0.001, "600 frames at 60 Hz carry 10 s")
+	assert_eq(seen.keys().size(), 2, "alternating 16 and 17 ms")

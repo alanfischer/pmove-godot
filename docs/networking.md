@@ -151,7 +151,7 @@ cmd.move_input = Input.get_vector(...)
 cmd.yaw = rotation.y
 cmd.pitch = camera.rotation.x
 cmd.jump = Input.is_action_pressed("jump")
-cmd.delta = delta
+cmd.delta = client_movement.command_delta(delta)  # whole ms, the remainder carried to the next
 cmd.quantize()  # round to what the wire carries, so the server simulates exactly this
 
 client_movement.predict(body, cmd, modifier_cb)
@@ -164,7 +164,14 @@ send_to_server(InputCommand.encode_batch(recent.slice(-3)))  # the new command p
 codes each command against the one before it in the packet, so a backup that repeats its
 neighbour costs a byte. A running player's command plus two backups is about 21 bytes. The client
 must predict with the quantized values — that's what `quantize()` is for — or every reconcile
-will find a sub-millimetre mismatch that's entirely self-inflicted.
+will find a sub-millimetre mismatch that's entirely self-inflicted. `delta` rounds to whole
+milliseconds, as GoldSrc's usercmd carried `msec`; `command_delta()` carries the remainder so the
+commands still add up to real time.
+
+A transport that codes fields itself (goldnet's command streams) can take the command as plain
+values instead: `to_fields()` gives them in a fixed order, most-changing first, and
+`InputCommand.from_fields(array)` rebuilds exactly the quantized command, and `FIELD_TYPES` declares
+each field's type, so the transport can send only what changed.
 
 ### Server (each physics frame, per player)
 

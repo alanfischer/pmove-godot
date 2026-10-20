@@ -40,6 +40,7 @@ var state: Movement.MovementState
 var _sim: Movement.Simulation
 var _pb                  # prediction harness; stores { seq, cmd, snapshot, modifiers }
 var _next_seq := 1       # see get_next_seq()
+var _ms_carry := 0.0     # see command_delta()
 
 
 ## `p_harness` overrides the bundled PredictionBuffer with anything exposing its four members
@@ -59,6 +60,15 @@ func get_next_seq() -> int:
 	var seq := _next_seq
 	_next_seq += 1
 	return seq
+
+
+## A frame's delta as the whole milliseconds a command carries (InputCommand.quantize() rounds to
+## them), with the remainder carried into the next frame, so commands add up to real time: at 60 Hz
+## they go 17, 16, 17 ms rather than all 17 and 2% fast.
+func command_delta(delta: float) -> float:
+	var ms := maxi(roundi((delta + _ms_carry) * 1000.0), 0)
+	_ms_carry += delta - ms / 1000.0
+	return ms / 1000.0
 
 
 ## Seq of the most recently generated command (get_next_seq() - 1), or 0 before the first one.
