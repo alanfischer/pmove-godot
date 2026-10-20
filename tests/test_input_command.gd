@@ -298,13 +298,13 @@ func test_fields_roundtrip_is_exact_once_quantized() -> void:
 		if i % 7 == 0:
 			cmd.delta = rng.randf_range(0.01, 0.05)
 		cmd.quantize()
-		var f: Array = cmd.to_fields()
-		assert_eq(f.size(), IC.FIELD_TYPES.size(), "every field")
-		for k in f.size():
-			assert_eq(typeof(f[k]), IC.FIELD_TYPES[k], "field %d has its declared type" % k)
+		var f: Dictionary = cmd.to_fields()
+		assert_eq(f.keys(), IC.FIELDS.keys(), "every field, in the table's order")
+		for name: String in f:
+			assert_eq(typeof(f[name]), IC.FIELDS[name]["type"], "%s has its declared type" % name)
 		var out = IC.from_fields(f)
 		assert_true(_same(out, cmd), "command %d rebuilds to exactly what was predicted" % i)
-	assert_eq(IC.from_fields([1, 2, 3]), null, "a short array rebuilds nothing")
+	assert_eq(IC.from_fields({"seq": 1, "yaw": 2}), null, "missing fields rebuild nothing")
 
 
 func test_command_delta_adds_up_to_real_time() -> void:

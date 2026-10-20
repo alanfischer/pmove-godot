@@ -180,37 +180,58 @@ static func _ms_from(ms: int) -> float:
 	return _f32(ms / 1000.0)
 
 
-# --- Fields: the command as plain values, for a transport that codes them itself ---
-#
-# The fields that change most come first, so a transport that masks changed fields (goldnet's
-# command streams) fits the usual mask in a byte:
-#   seq, yaw, move_x, move_y, pitch, flags, msec, custom_flags   ints, quantized as quantize() rounds
-#   head_x, head_y                                               floats (f32)
+# --- Fields: the command as plain named values, for a transport that codes them itself ---
 
-## Each field's type, in order, for a transport that wants them declared.
-const FIELD_TYPES := [TYPE_INT, TYPE_INT, TYPE_INT, TYPE_INT, TYPE_INT, TYPE_INT, TYPE_INT, TYPE_INT,
-	TYPE_FLOAT, TYPE_FLOAT]
+## The command's fields and their types, as a table in goldnet SyncSpec's shape: angles, move axes
+## and msec are ints quantized as quantize() rounds them, the head's displacement floats (f32). The
+## ones that change most come first, so a transport that masks changed fields in this order
+## (goldnet's command streams) fits the usual mask in a byte.
+const FIELDS := {
+	"seq": {"type": TYPE_INT},
+	"yaw": {"type": TYPE_INT},
+	"move_x": {"type": TYPE_INT},
+	"move_y": {"type": TYPE_INT},
+	"pitch": {"type": TYPE_INT},
+	"flags": {"type": TYPE_INT},
+	"msec": {"type": TYPE_INT},
+	"custom_flags": {"type": TYPE_INT},
+	"head_x": {"type": TYPE_FLOAT},
+	"head_y": {"type": TYPE_FLOAT},
+}
 
-## The command's fields, in the order above.
-func to_fields() -> Array:
-	return [seq, _angle_to(yaw), _move_to(move_input.x), _move_to(move_input.y), _angle_to(pitch),
-		pack_flags(), _ms_to(delta), custom_flags & 0xFFFF, _f32(head_delta.x), _f32(head_delta.y)]
+
+## The command's fields, keyed as FIELDS names them.
+func to_fields() -> Dictionary:
+	return {
+		"seq": seq,
+		"yaw": _angle_to(yaw),
+		"move_x": _move_to(move_input.x),
+		"move_y": _move_to(move_input.y),
+		"pitch": _angle_to(pitch),
+		"flags": pack_flags(),
+		"msec": _ms_to(delta),
+		"custom_flags": custom_flags & 0xFFFF,
+		"head_x": _f32(head_delta.x),
+		"head_y": _f32(head_delta.y),
+	}
 
 
 ## A command rebuilt from to_fields()'s values: exactly the quantized command they came from. Null
-## for an array of the wrong size.
-static func from_fields(f: Array) -> RefCounted:
-	if f.size() != FIELD_TYPES.size():
-		return null
+## if a field is missing.
+static func from_fields(f: Dictionary) -> RefCounted:
+	for field: String in FIELDS:
+		if not f.has(field):
+			return null
 	var cmd = _script().new()
-	cmd.seq = int(f[0])
-	cmd.yaw = _angle_from(clampi(int(f[1]), -32767, 32767))
-	cmd.move_input = Vector2(_move_from(clampi(int(f[2]), -127, 127)), _move_from(clampi(int(f[3]), -127, 127)))
-	cmd.pitch = _angle_from(clampi(int(f[4]), -32767, 32767))
-	cmd.unpack_flags(int(f[5]))
-	cmd.delta = _ms_from(maxi(int(f[6]), 0))
-	cmd.custom_flags = int(f[7]) & 0xFFFF
-	cmd.head_delta = Vector2(_f32(float(f[8])), _f32(float(f[9])))
+	cmd.seq = int(f["seq"])
+	cmd.yaw = _angle_from(clampi(int(f["yaw"]), -32767, 32767))
+	cmd.move_input = Vector2(_move_from(clampi(int(f["move_x"]), -127, 127)),
+			_move_from(clampi(int(f["move_y"]), -127, 127)))
+	cmd.pitch = _angle_from(clampi(int(f["pitch"]), -32767, 32767))
+	cmd.unpack_flags(int(f["flags"]))
+	cmd.delta = _ms_from(maxi(int(f["msec"]), 0))
+	cmd.custom_flags = int(f["custom_flags"]) & 0xFFFF
+	cmd.head_delta = Vector2(_f32(float(f["head_x"])), _f32(float(f["head_y"])))
 	return cmd
 
 

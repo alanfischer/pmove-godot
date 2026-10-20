@@ -169,9 +169,9 @@ milliseconds, as GoldSrc's usercmd carried `msec`; `command_delta()` carries the
 commands still add up to real time.
 
 A transport that codes fields itself (goldnet's command streams) can take the command as plain
-values instead: `to_fields()` gives them in a fixed order, most-changing first, and
-`InputCommand.from_fields(array)` rebuilds exactly the quantized command, and `FIELD_TYPES` declares
-each field's type, so the transport can send only what changed.
+values instead: `to_fields()` gives them by name, `InputCommand.from_fields(dict)` rebuilds exactly
+the quantized command, and `FIELDS` declares each one's type, most-changing first, so the transport
+can send only what changed.
 
 ### Server (each physics frame, per player)
 
