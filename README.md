@@ -217,7 +217,7 @@ belongs outside it. Ladders, swimming and anything else a game adds are supplied
 ./run_tests.sh          # or: GODOT=/path/to/Godot ./run_tests.sh
 ```
 
-550 assertions across 19 suites, under a second, headless — no scene boot and no editor import.
+The suites run headless in seconds, with no scene boot and no editor import.
 The runner reports a suite that won't compile rather than hanging on it, and treats a
 `SCRIPT ERROR` anywhere in the output as a failure: a GDScript runtime error kills only the
 frame it happens in, so a test can silently drop its remaining assertions and still report green.
