@@ -10,7 +10,7 @@ const WALK_NORMAL_Y := 0.7
 
 class MovementState:
 	## The body this state is a view over — bound by simulate_tick (and eagerly by
-	## ServerMovement/ClientMovement.bind_body) so it is set before the first tick.
+	## PmoveServerMovement/PmoveClientMovement.bind_body) so it is set before the first tick.
 	## Duck-typed: anything exposing a `global_position` property works.
 	var _body = null
 	## Storage used only while unbound (a bare MovementState in a unit test).
@@ -347,7 +347,7 @@ static func camera_basis(cmd) -> Basis:
 
 
 # --- Simulation: owns a MovementConfig, runs all physics ---
-# ServerMovement and ClientMovement each hold one of these.
+# PmoveServerMovement and PmoveClientMovement each hold one of these.
 # cmd parameter is untyped (Variant) to avoid class_name dependency issues
 # in headless mode. It expects an InputCommand-shaped object with fields:
 # move_input: Vector2, yaw: float, pitch: float, delta: float,
@@ -503,7 +503,7 @@ class Simulation:
 		## so step_h never exceeds normal_h and the normal path wins; a real stair
 		## fully blocks the normal path but the step path clears it.
 		##
-		## Non-deterministic (two physics paths in one frame), but ClientMovement
+		## Non-deterministic (two physics paths in one frame), but PmoveClientMovement
 		## ._replay_end_seq suppresses the follow-on chain corrections that non-
 		## determinism used to cause, so the net result is at most one snap.
 		var saved_pos: Vector3 = body.global_position
@@ -662,7 +662,7 @@ class Simulation:
 
 	func simulate_tick(body, state: MovementState, cmd) -> void:
 		## Run one full movement tick — shared simulation kernel for client & server.
-		## body: any object implementing the Body interface (e.g. GodotBody).
+		## body: any object implementing the Body interface (e.g. PmoveGodotBody).
 		_tick(body, state, cmd)
 		# A ladder, swim or water-jump tick can release jump but never latch it: none of those
 		# paths sets oldbuttons, so jump held climbing out jumps.
@@ -689,7 +689,7 @@ class Simulation:
 		# GoldSrc pusher carry: displacement of the mover underfoot this tick,
 		# applied as its own collision-checked move before locomotion. Riders of
 		# moving brush entities (lifts, the golem) must be carried explicitly, and
-		# this is the ONLY thing that carries them: GodotBody switches the body's
+		# this is the ONLY thing that carries them: PmoveGodotBody switches the body's
 		# platform layers off so move_and_slide can't quietly carry them a second
 		# time (see the note there — it did, and it flung ducked golem riders).
 		# Runs before the move-lock early-out — a stunned rider still rides.

@@ -34,7 +34,7 @@ var walk: bool = false
 var noclip: bool = false
 
 ## Physics delta for this tick (normally 1/60). quantize() rounds it to whole milliseconds, as
-## GoldSrc's usercmd carried msec; ClientMovement.command_delta() keeps the rounding from drifting.
+## GoldSrc's usercmd carried msec; PmoveClientMovement.command_delta() keeps the rounding from drifting.
 var delta: float = 0.0
 
 ## Game-defined flags bitmask. pmove does not interpret these — the game

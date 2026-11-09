@@ -197,7 +197,7 @@ func _set_hull(height: float) -> void:
 
 
 func _toggle_hull() -> void:
-	var height := GodotBody.height_of(_hull_shape.shape)
+	var height := PmoveGodotBody.height_of(_hull_shape.shape)
 	_use_capsule = not _use_capsule
 	_set_hull(height)
 

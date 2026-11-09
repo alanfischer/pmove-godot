@@ -1,4 +1,4 @@
-## GodotBody — wraps a CharacterBody3D to implement the Body interface
+## PmoveGodotBody — wraps a CharacterBody3D to implement the Body interface
 ## used by Movement.simulate_tick / walk_move / update_crouch.
 ##
 ## Body interface methods:
@@ -13,7 +13,7 @@
 ##   velocity: Vector3  (get/set)
 ##   yaw: float  (get/set)
 
-class_name GodotBody extends RefCounted
+class_name PmoveGodotBody extends RefCounted
 
 var _body: CharacterBody3D
 ## The shapes set_collision_height resizes, resolved once in _init: the hull first, then any

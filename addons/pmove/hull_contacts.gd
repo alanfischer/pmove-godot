@@ -8,7 +8,7 @@
 ##   unstick_offset — PM_CheckStuck's teleport, for a hull no sweep can leave.
 ## As modifiers they are recorded and replayed with the command, never re-decided on replay.
 ##
-## The body's own platform layers must be off, as GodotBody leaves them, or Godot carries the
+## The body's own platform layers must be off, as PmoveGodotBody leaves them, or Godot carries the
 ## rider a second time.
 
 const Movement = preload("res://addons/pmove/movement.gd")
@@ -88,7 +88,7 @@ func _init(character: CharacterBody3D) -> void:
 
 
 ## This tick's ride, push, depenetration and unstick, into `mods`. `body` is the adapter the
-## simulation drives (GodotBody), for the unstick search; null skips unstick.
+## simulation drives (PmoveGodotBody), for the unstick search; null skips unstick.
 ##
 ## Only the first call in a physics frame does anything: a server batching N commands into one
 ## frame still saw the world move once, and everything here is a position delta, so the later

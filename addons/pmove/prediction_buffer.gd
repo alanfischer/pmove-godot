@@ -10,10 +10,10 @@ extends RefCounted
 ##   - what a "snapshot" of predicted state is (captured at record() time; opaque here),
 ##   - how far off counts as diverged (a predicate passed to reconcile()),
 ##   - how to apply the server state and how to re-simulate one input.
-## ClientMovement is the caller that drives it for GoldSrc movement; the same buffer would
+## PmoveClientMovement is the caller that drives it for GoldSrc movement; the same buffer would
 ## serve a vehicle or anything else with an input -> state simulation.
 ##
-## This class IS the duck-typed harness interface ClientMovement expects — four members:
+## This class IS the duck-typed harness interface PmoveClientMovement expects — four members:
 ##
 ##   record(seq, input, snapshot, context) -> void
 ##   reconcile(acked_seq, diverged: Callable) -> Variant   # null, or { predicted, replay }
@@ -23,7 +23,7 @@ extends RefCounted
 ## Anything exposing those works, so a game whose netcode already keeps an input history can
 ## adapt it rather than run a second buffer over the same inputs. Note that the sequence
 ## counter is NOT part of this: the caller owns it, because the rule that it must keep climbing
-## across clear() is the caller's requirement to state (see ClientMovement.clear()).
+## across clear() is the caller's requirement to state (see PmoveClientMovement.clear()).
 ##
 ## Determinism note: replay is data-driven from the `context` captured at record() time, never
 ## from live state — so state that has since changed (an expired buff, a lane since left) cannot

@@ -13,7 +13,7 @@ extends "res://tests/suite.gd"
 ## bands indefinitely. Nothing about that is visible in a single-step reading of the code.
 ##
 ## Sequence ids are passed in explicitly here because the buffer does not own the counter —
-## ClientMovement does (see its get_next_seq), so the seqs a test records under are its own
+## PmoveClientMovement does (see its get_next_seq), so the seqs a test records under are its own
 ## business and spelling them out makes each case's ack arithmetic readable.
 
 const PB := preload("res://addons/pmove/prediction_buffer.gd")
@@ -177,7 +177,7 @@ func test_max_buffer_eviction() -> void:
 
 
 func test_clear_drops_history() -> void:
-	# The caller's sequence counter is NOT this buffer's business (ClientMovement keeps
+	# The caller's sequence counter is NOT this buffer's business (PmoveClientMovement keeps
 	# climbing across a respawn); clear() drops the unacked history and the guards.
 	var pb := PB.new()
 	for i in 3:
