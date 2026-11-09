@@ -1,4 +1,4 @@
-class_name ServerMovement extends RefCounted
+class_name PmoveServerMovement extends RefCounted
 
 const Movement = preload("res://addons/pmove/movement.gd")
 const MovementConfig = preload("res://addons/pmove/movement_config.gd")

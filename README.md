@@ -114,13 +114,13 @@ the kernel never references them, and a script nothing preloads is never loaded.
 | `movement_config.gd` | `PmoveConfig`, the physics constants for one simulation, as a `Resource`. Defaults are Half-Life's cvar values (`sv_friction 4`, `sv_accelerate 10`, `sv_stepsize 18`, …) converted to metres. |
 | `ladder_water.gd` | Ladders and water: `PM_LadderMove`, swimming and `PM_CheckWaterJump`'s climb-out. A `Driver` picks between them each tick from what the game reports. |
 | `hull_contacts.gd` | Movers and unsticking: riding, being pushed, depenetration and `PM_CheckStuck`, as per-tick modifiers. |
-| `godot_body.gd` | `GodotBody`, adapting a `CharacterBody3D` to the duck-typed body interface. Anything exposing that interface works. |
+| `godot_body.gd` | `PmoveGodotBody`, adapting a `CharacterBody3D` to the duck-typed body interface. Anything exposing that interface works. |
 | `input_command.gd` | The per-tick command the kernel reads. Also knows how to pack itself for the wire. |
 | `server_movement.gd` | Server authority: the input queue and per-tick processing. |
 | `client_movement.gd` | Prediction and reconciliation. |
 | `prediction_buffer.gd` | The unacked-input history behind it. |
 
-Networking has its own reference — the body interface, the `ServerMovement` / `ClientMovement`
+Networking has its own reference — the body interface, the `PmoveServerMovement` / `PmoveClientMovement`
 APIs, the modifier callback, and the per-frame integration on both sides:
 **[docs/networking.md](docs/networking.md)**.
 
@@ -132,7 +132,7 @@ deliberately differs.
 
 The kernel takes a **body** — anything with `global_position`, `velocity`, `yaw`,
 `move_and_slide()`, `move_and_collide()`, `is_on_floor()`, `set_collision_height()`,
-`has_headroom()` and `can_move()`. `GodotBody` is the bundled adapter for `CharacterBody3D`;
+`has_headroom()` and `can_move()`. `PmoveGodotBody` is the bundled adapter for `CharacterBody3D`;
 `simulate_tick` never sees a `Node`.
 
 The hull can be a box, as GoldSrc's are, or a capsule: both climb stairs and stop at slopes too
@@ -175,7 +175,7 @@ its own choices, like a monster swimming where it walks, can call the moves dire
 `ladder_velocity`, `water_velocity`, `swim` and `water_jump`. `drag_accelerate` is the swim with
 the drag left open, for a game's own free 3D move such as flight.
 
-`ClientMovement` takes a **prediction harness** — anything with four members:
+`PmoveClientMovement` takes a **prediction harness** — anything with four members:
 
 ```gdscript
 record(seq, input, snapshot, context) -> void
@@ -185,21 +185,24 @@ clear() -> void
 ```
 
 `PredictionBuffer` is the bundled one and is the default; pass your own to
-`ClientMovement.new(cfg, harness)` if your netcode already keeps an input history and you'd
+`PmoveClientMovement.new(cfg, harness)` if your netcode already keeps an input history and you'd
 rather not run a second buffer over the same inputs.
 
-The sequence counter is deliberately *not* in that interface. It lives on `ClientMovement`,
+The sequence counter is deliberately *not* in that interface. It lives on `PmoveClientMovement`,
 because the rule it obeys is a movement one: it must keep climbing across `clear()`, or the
 server discards the first commands after a respawn as duplicates of the pre-death ones and the
 player cannot move.
 
-### No `class_name` on most files
+### Class names
+
+What a game names gets a `class_name`, prefixed so it can't collide with the game's own:
+`PmoveCharacter3D`, `PmoveConfig`, `PmoveClientMovement`, `PmoveServerMovement` and
+`PmoveGodotBody`. The rest have none.
 
 Global class names resolve from a cache the editor writes during an import pass, which a bare
-`--headless --path` run does not perform. So the scripts are loaded by path
-(`preload("res://addons/pmove/movement.gd")`) rather than by identifier, and the suites run from
-a clean checkout with no editor step. `PmoveCharacter3D` and `PmoveConfig` do have names, for
-the Add Node dialog and the inspector, but nothing in the library or its tests relies on them.
+`--headless --path` run does not perform. So the library and its tests load scripts by path
+(`preload("res://addons/pmove/movement.gd")`) and never by those names, and the suites run from a
+clean checkout with no editor step.
 
 ## Determinism
 
@@ -214,7 +217,7 @@ belongs outside it. Ladders, swimming and anything else a game adds are supplied
 ./run_tests.sh          # or: GODOT=/path/to/Godot ./run_tests.sh
 ```
 
-550 assertions across 19 suites, under a second, headless — no scene boot and no editor import.
+The suites run headless in seconds, with no scene boot and no editor import.
 The runner reports a suite that won't compile rather than hanging on it, and treats a
 `SCRIPT ERROR` anywhere in the output as a failure: a GDScript runtime error kills only the
 frame it happens in, so a test can silently drop its remaining assertions and still report green.

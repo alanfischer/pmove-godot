@@ -1,5 +1,5 @@
-class_name ClientMovement extends RefCounted
-## Client-side predicted movement — mirrors ServerMovement's API.
+class_name PmoveClientMovement extends RefCounted
+## Client-side predicted movement — mirrors PmoveServerMovement's API.
 ##
 ## Owns a MovementState and prediction buffer internally.
 ## Call predict() each physics frame, reconcile() when server state arrives.

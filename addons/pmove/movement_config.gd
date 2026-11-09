@@ -1,6 +1,6 @@
 class_name PmoveConfig extends Resource
 ## Physics constants for one movement simulation instance.
-## Construct one and pass it to ServerMovement/ClientMovement._init(), or save one as a .tres and
+## Construct one and pass it to PmoveServerMovement/PmoveClientMovement._init(), or save one as a .tres and
 ## give it to a PmoveCharacter3D.
 ## Default values match GoldSrc/Half-Life physics scaled to Godot metres (1 unit = 1m).
 ## Scripts load it by path (preload("res://addons/pmove/movement_config.gd")); the class name is

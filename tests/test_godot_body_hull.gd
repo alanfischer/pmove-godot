@@ -1,5 +1,5 @@
 extends "res://tests/suite.gd"
-## GodotBody resizes the hull for crouching whatever its shape — the demo's is a box, which keeps
+## PmoveGodotBody resizes the hull for crouching whatever its shape — the demo's is a box, which keeps
 ## its height in size.y rather than `height`.
 
 # Preloaded, not the class_name: a fresh checkout (CI) has no class cache to resolve it from.

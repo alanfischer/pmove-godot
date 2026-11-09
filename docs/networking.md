@@ -9,7 +9,7 @@ The player character uses `CharacterBody3D` (kinematic), not `RigidBody3D`. For 
 The deeper reason: client-side prediction requires the client and server to run **identical deterministic physics**. Godot's rigid body solver is not deterministic across machines — two computers simulating the same `RigidBody3D` will diverge due to floating point ordering and solver iteration differences. That makes rigid bodies incompatible with prediction/reconciliation.
 
 pmove therefore owns every source of motion the player has, including the ride on a moving
-brush entity: `GodotBody` switches the body's `platform_floor_layers`/`platform_wall_layers` off so
+brush entity: `PmoveGodotBody` switches the body's `platform_floor_layers`/`platform_wall_layers` off so
 `move_and_slide` can never apply Godot's own platform carry on top of `state.carry_motion`.
 
 This is the standard pattern for networked first-person shooters. All other entities in the game world (projectiles, physics objects, ragdolls) use `RigidBody3D` and engine-driven physics — they don't need prediction, so non-determinism is fine. The player is the special case because input latency makes snapshot interpolation unacceptable for your own character.
@@ -26,14 +26,14 @@ prediction, reconciliation and the input queue, which only a player needs.
 
 ## Files
 
-- **ServerMovement** (`server_movement.gd`) — Server-side: owns a `MovementState`, manages an input queue, processes all queued commands each physics frame.
-- **ClientMovement** (`client_movement.gd`) — Client-side: owns a `MovementState`, records predictions, reconciles with server state and replays on mismatch. Also defines `ServerState`.
+- **PmoveServerMovement** (`server_movement.gd`) — Server-side: owns a `MovementState`, manages an input queue, processes all queued commands each physics frame.
+- **PmoveClientMovement** (`client_movement.gd`) — Client-side: owns a `MovementState`, records predictions, reconciles with server state and replays on mismatch. Also defines `ServerState`.
 
 In `addons/pmove/`:
 
 - **Movement** (`movement.gd`) — Pure math simulation kernel. GoldSrc-derived physics constants (stored in Godot metres), `MovementState` data class, `simulate_tick()`. Gravity is forward Euler applied once per tick before collision. No Godot node dependencies.
 - **input_command.gd** — Serializable input snapshot (movement, look, jump, crouch, etc). Packs booleans into a bitmask for network transmission. No `class_name` due to headless script-load ordering issues — use `const InputCommand = preload("res://addons/pmove/input_command.gd")`.
-- **GodotBody** (`godot_body.gd`) — Adapter wrapping `CharacterBody3D` into the body interface that `simulate_tick` expects.
+- **PmoveGodotBody** (`godot_body.gd`) — Adapter wrapping `CharacterBody3D` into the body interface that `simulate_tick` expects.
 - **movement_config.gd** — Per-instance physics constants. One per simulation, so a monster keeps its own speed and hull while sharing the kernel.
 
 ## Naming conventions
@@ -61,21 +61,21 @@ func has_headroom(rise: float, from_offset := Vector3.ZERO) -> bool
 ```
 
 `force_sync_physics()` is optional — callers probe for it with `has_method` (see
-`ClientMovement._reconcile`), so a body that can't push its transform to the physics server early
+`PmoveClientMovement._reconcile`), so a body that can't push its transform to the physics server early
 still works.
 
-`GodotBody` implements this for `CharacterBody3D`. Tests use a `StubBody` with flat-ground collision.
+`PmoveGodotBody` implements this for `CharacterBody3D`. Tests use a `StubBody` with flat-ground collision.
 
 `MovementState.position` is a **view over the bound body's `global_position`**, not a copy — reads and
 writes go straight through, so the sim position and the physics body can never drift apart. Moving the
 body out of band (teleport, spawn placement) is immediately visible to everything that reads
 `state.position`, even while no commands are being processed. `simulate_tick` binds the body it is
-given; call `bind_body(body)` on ServerMovement/ClientMovement as soon as the body exists so
+given; call `bind_body(body)` on PmoveServerMovement/PmoveClientMovement as soon as the body exists so
 out-of-band moves before the first tick are covered too.
 
 ## API
 
-### ServerMovement
+### PmoveServerMovement
 
 ```
 .state: MovementState               # authoritative movement state
@@ -92,7 +92,7 @@ clear_queue()                       # discard queued commands, keep last_process
 clear()                             # full reset — clears queue and allows all seqs again
 ```
 
-### ClientMovement
+### PmoveClientMovement
 
 ```
 .state: MovementState               # current predicted movement state
@@ -106,7 +106,7 @@ buffer_size() -> int                # number of unacked predictions in the buffe
 clear()                             # clear prediction buffer (does NOT reset seq counter)
 ```
 
-`reconcile()` takes a `ClientMovement.ServerState`:
+`reconcile()` takes a `PmoveClientMovement.ServerState`:
 
 ```gdscript
 class ServerState:
@@ -192,7 +192,7 @@ send_server_state(server_movement.last_processed_seq,
 ### Client reconciliation (on receiving server state)
 
 ```gdscript
-var server := ClientMovement.ServerState.new(seq, pos, vel, crouched, on_floor, jumping, jump_held)
+var server := PmoveClientMovement.ServerState.new(seq, pos, vel, crouched, on_floor, jumping, jump_held)
 client_movement.reconcile(body, server)
 ```
 

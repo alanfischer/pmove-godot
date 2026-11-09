@@ -108,7 +108,7 @@ func test_predict_syncs_body_to_state() -> void:
 
 
 func test_buffer_overflow_prunes_old() -> void:
-	# The cap belongs to the harness, not to ClientMovement — so this reaches it through an
+	# The cap belongs to the harness, not to PmoveClientMovement — so this reaches it through an
 	# injected buffer, which is also the seam a game with its own input history would use.
 	var buffer := PredictionBuffer.new()
 	buffer.max_buffer = 8
@@ -120,7 +120,7 @@ func test_buffer_overflow_prunes_old() -> void:
 		"the unacked buffer is capped by the harness it was given")
 
 
-## The sequence counter lives on ClientMovement rather than on the buffer, because the rule it
+## The sequence counter lives on PmoveClientMovement rather than on the buffer, because the rule it
 ## obeys is a movement one: it must keep climbing across clear(), or the server discards the
 ## first commands after a respawn as duplicates of the pre-death ones and the player is stuck.
 func test_seq_is_monotonic() -> void:
