@@ -517,10 +517,7 @@ class Simulation:
 
 		# Only attempt step path when there is meaningful horizontal velocity
 		var wanted_h: float = Vector2(saved_vel.x, saved_vel.z).length() * float(cmd.delta)
-		# GoldSrc's "first try moving directly to the next spot": a move nothing deflected and
-		# that did not climb leaves the step path nothing to climb either, so it would be rejected.
-		if wanted_h < 0.001 or (normal_pos.y - saved_pos.y < cfg.min_step_rise
-				and Vector2(normal_vel.x, normal_vel.z).is_equal_approx(Vector2(saved_vel.x, saved_vel.z))):
+		if wanted_h < 0.001:
 			state.velocity = normal_vel
 			return normal_on_floor if normal_on_floor else step_down(body, state)
 
