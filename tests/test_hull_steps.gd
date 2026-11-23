@@ -17,6 +17,17 @@ const MovementConfig = preload("res://addons/pmove/movement_config.gd")
 const RISER := 0.4
 const TREAD := 1.2
 
+var _sweeps := 0
+
+
+## Counts the step path's sweeps: it is the only caller of move_and_collide on open ground.
+class CountingBody extends GodotBodyScript:
+	var on_sweep := Callable()
+
+	func move_and_collide(motion: Vector3) -> KinematicCollision3D:
+		on_sweep.call()
+		return super(motion)
+
 
 func _slab(size: Vector3, pos: Vector3, rot_z := 0.0) -> void:
 	var sb := StaticBody3D.new()
@@ -52,7 +63,8 @@ func _walk(hull: Shape3D, ticks: int, start := Vector3.ZERO, move := Vector2(0, 
 	player.global_position = start
 
 	var sim := Movement.Simulation.new(MovementConfig.new())
-	var body := GodotBodyScript.new(player)
+	var body := CountingBody.new(player)
+	body.on_sweep = func() -> void: _sweeps += 1
 	var state := Movement.MovementState.new()
 	state.on_floor = true
 	var top := 0.0
@@ -77,6 +89,17 @@ func test_climbs_stairs_from_rest() -> void:
 	for name: String in _hulls():
 		var top := _walk(_hulls()[name], 90, Vector3(0, 0, -0.6))
 		assert_almost_eq(top, RISER * 3, 0.02, "the %s should reach the third step's top" % name)
+
+
+func test_open_ground_skips_the_step_path() -> void:
+	# GoldSrc PM_WalkMove's first try: a move that reaches its destination never tries a step.
+	_slab(Vector3(20, 1, 20), Vector3(0, -0.5, 0))
+	for name: String in _hulls():
+		_sweeps = 0
+		var top := _walk(_hulls()[name], 60, Vector3(0, 0, 4))
+		assert_almost_eq(top, 0.0, 0.01, "a %s on open ground stays on it" % name)
+		# Every tick swept twice before. A capsule's rest jitter can still read as a rise once.
+		assert_lt(_sweeps, 10, "a %s walking unobstructed should not sweep for steps" % name)
 
 
 func test_refuses_a_slope_it_cannot_stand_on() -> void:
